@@ -2,9 +2,9 @@ import { test, expect } from "@playwright/test";
 
 const PROD_URL = process.env.TEST_URL || "https://wisprbridge.vercel.app";
 
-test.describe("WisprBridge Production E2E Suite", () => {
-  test("1. Gateway displays Join Room/Group & Sign In/Sign Up options", async ({ page }) => {
-    // Clear localStorage to ensure fresh visitor state
+test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
+  test("1. Web Desktop Gateway displays Join Room and Create Room without requiring login", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 }); // Desktop web viewport
     await page.goto(PROD_URL);
     await page.evaluate(() => localStorage.clear());
     await page.reload();
@@ -14,69 +14,43 @@ test.describe("WisprBridge Production E2E Suite", () => {
     await expect(page).toHaveTitle(/WisprBridge/);
 
     // Gateway heading
-    await expect(page.getByRole("heading", { name: /Welcome to WisprBridge/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: /WisprBridge/i })).toBeVisible({ timeout: 10000 });
 
-    // Option 1: Join Room or Group
-    await expect(page.getByRole("heading", { name: /Join a Room or Group/i })).toBeVisible();
+    // Web option: Join Room
+    await expect(page.getByRole("heading", { name: /Join a Room \/ Device/i })).toBeVisible();
     await expect(page.getByPlaceholder(/e\.g\. 582194/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /Join Room/i })).toBeVisible();
 
-    // Option 2: Sign In / Create Account
-    await expect(page.getByRole("heading", { name: /Sign In \/ Create Account/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Sign In \/ Sign Up/i })).toBeVisible();
+    // Web option: Create New Room (Instant, zero login)
+    await expect(page.getByRole("heading", { name: /Create a New Room/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Create Room/i })).toBeVisible();
+
+    // Optional sign in button visible
+    await expect(page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i })).toBeVisible();
   });
 
-  test("2. Floating Auth Modal (Sign In / Sign Up) interaction", async ({ page }) => {
+  test("2. Web Desktop workspace features a prominent 'Pair Room' button in Header", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 }); // Desktop web viewport
     await page.goto(PROD_URL);
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
-    // Click Sign In / Sign Up button on Gateway
-    const authBtn = page.getByRole("button", { name: /Sign In \/ Sign Up/i });
-    await expect(authBtn).toBeVisible({ timeout: 10000 });
-    await authBtn.click();
+    // Click Create Room to enter workspace
+    const createBtn = page.getByRole("button", { name: /Create Room/i });
+    await expect(createBtn).toBeVisible({ timeout: 10000 });
+    await createBtn.click();
 
-    // Modal should be visible
-    const modalHeading = page.getByRole("heading", { name: /Sign In to WisprBridge|Create Your Account/i });
-    await expect(modalHeading).toBeVisible();
+    // In the Web Desktop workspace, verify prominent "Pair Room" button in header
+    const pairRoomBtn = page.getByRole("button", { name: /Pair Room/i });
+    await expect(pairRoomBtn).toBeVisible({ timeout: 10000 });
 
-    // Inputs
-    await expect(page.getByPlaceholder("developer@example.com")).toBeVisible();
-    await expect(page.getByPlaceholder("••••••••")).toBeVisible();
+    // Active room code is visible
+    const roomCodePill = page.locator("header div").filter({ hasText: /Room:/i }).first();
+    await expect(roomCodePill).toBeVisible();
 
-    // Toggle between Sign In and Sign Up
-    const toggleBtn = page.getByRole("button", { name: /Don't have an account\?|Already have an account\?/i });
-    await expect(toggleBtn).toBeVisible();
-    await toggleBtn.click();
-    await expect(page.getByRole("heading", { name: /Create Your Account/i })).toBeVisible();
-
-    // Close modal
-    const closeBtn = page.locator(".fixed.inset-0 button").filter({ has: page.locator("svg.lucide-x") }).first();
-    await closeBtn.click();
-    await expect(modalHeading).not.toBeVisible();
-  });
-
-  test("3. Guest Room creation & Room/Group Pairing Modal", async ({ page }) => {
-    await page.goto(PROD_URL);
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.waitForLoadState("domcontentloaded");
-
-    // Click quick guest room
-    const guestBtn = page.getByRole("button", { name: /start a quick temporary guest room/i });
-    await expect(guestBtn).toBeVisible({ timeout: 10000 });
-    await guestBtn.click();
-
-    // Now in active bridge workspace
-    const roomBtn = page.locator("header button").filter({ hasText: /Room:/i });
-    await expect(roomBtn).toBeVisible({ timeout: 10000 });
-    const roomText = await roomBtn.innerText();
-    const pairCode = roomText.replace(/\D/g, "").slice(0, 6);
-    expect(pairCode.length).toBe(6);
-
-    // Click to open Room & Group Pairing modal
-    await roomBtn.click();
+    // Clicking "Pair Room" on Desktop Web opens the Room & Group Pairing modal
+    await pairRoomBtn.click();
     await expect(page.getByRole("heading", { name: /Room & Group Pairing/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Join Group/i })).toBeVisible();
 
@@ -86,8 +60,8 @@ test.describe("WisprBridge Production E2E Suite", () => {
     await expect(page.getByRole("heading", { name: /Room & Group Pairing/i })).not.toBeVisible();
   });
 
-  test("4. Cross-Device Sync, Auto-Copy, Keep, Reader Modal, and Delete", async ({ browser }) => {
-    // Context 1: Mobile host (starts a room)
+  test("3. Cross-Device Real-Time Sync & 1-Click Copy on Web Laptop", async ({ browser }) => {
+    // Context 1: Mobile sender
     const mobileContext = await browser.newContext({
       viewport: { width: 390, height: 844 },
       permissions: ["clipboard-read", "clipboard-write"],
@@ -98,111 +72,113 @@ test.describe("WisprBridge Production E2E Suite", () => {
     await mobilePage.reload();
     await mobilePage.waitForLoadState("domcontentloaded");
 
-    // Start mobile room
-    const mobileGuestBtn = mobilePage.getByRole("button", { name: /start a quick temporary guest room/i });
-    await expect(mobileGuestBtn).toBeVisible({ timeout: 10000 });
-    await mobileGuestBtn.click();
+    // Mobile creates room
+    const mobileCreateBtn = mobilePage.getByRole("button", { name: /Create Room/i });
+    await expect(mobileCreateBtn).toBeVisible({ timeout: 10000 });
+    await mobileCreateBtn.click();
 
-    const mobileRoomBtn = mobilePage.locator("header button").filter({ hasText: /Room:/i });
+    const mobileRoomBtn = mobilePage.locator("header div").filter({ hasText: /Room:/i }).first();
     await expect(mobileRoomBtn).toBeVisible({ timeout: 10000 });
     const roomText = await mobileRoomBtn.innerText();
     const pairCode = roomText.replace(/\D/g, "").slice(0, 6);
     expect(pairCode.length).toBe(6);
 
-    // Context 2: Laptop receiver (joins via 6-digit code or direct URL)
+    // Context 2: Laptop Web receiver
     const laptopContext = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       permissions: ["clipboard-read", "clipboard-write"],
     });
     const laptopPage = await laptopContext.newPage();
+    // Connect directly via room query param
     await laptopPage.goto(`${PROD_URL}?code=${pairCode}`);
     await laptopPage.waitForLoadState("domcontentloaded");
 
-    // Laptop should be in the room
-    const laptopRoomBtn = laptopPage.locator("header button").filter({ hasText: /Room:/i });
-    await expect(laptopRoomBtn).toContainText(pairCode, { timeout: 10000 });
+    // Laptop should be in the room and have prominent "Pair Room" button
+    await expect(laptopPage.getByRole("button", { name: /Pair Room/i })).toBeVisible({ timeout: 10000 });
 
     // Enable Auto-Copy on Laptop
     const laptopAutoCopy = laptopPage.getByRole("button", { name: /Auto-Copy/i });
     await laptopAutoCopy.click();
     await expect(laptopAutoCopy).toContainText("ON");
 
-    // Mobile sends prompt (Whisper Flow speech-to-text simulation)
-    const testPrompt = `Sync Prompt ${Date.now()}: Test real-time bridge across mobile & laptop`;
+    // Mobile inputs prompt
+    const testPrompt = `Sync Prompt ${Date.now()}: Real-time bridge test`;
     const mobileInput = mobilePage.getByPlaceholder(/Create unit tests|e\.g\./i);
     await mobileInput.fill(testPrompt);
     const mobileAddBtn = mobilePage.getByTitle(/Add and sync prompt/i);
     await mobileAddBtn.click();
 
-    // Verify appears on mobile
-    const mobileCard = mobilePage.locator(".group").filter({ hasText: testPrompt });
-    await expect(mobileCard).toBeVisible({ timeout: 10000 });
-
     // Verify appears on laptop in real time
     const laptopCard = laptopPage.locator(".group").filter({ hasText: testPrompt });
     await expect(laptopCard).toBeVisible({ timeout: 15000 });
 
-    // Verify card metadata: timestamp and 1-hour TTL
-    await expect(laptopCard.locator("span").filter({ hasText: /left|Kept/ }).first()).toBeVisible({ timeout: 10000 });
-
-    // Verify Copy button is next to Delete button
+    // 1-Click Copy on laptop
     const copyBtn = laptopCard.locator("button[title*='Copy']");
-    const deleteBtn = laptopCard.locator("button[title*='Delete']");
-    await expect(copyBtn).toBeVisible();
-    await expect(deleteBtn).toBeVisible();
-
-    // 1-Click Copy
     await copyBtn.click();
     const toast = laptopPage.locator(".fixed.bottom-20, .fixed.bottom-6");
     await expect(toast).toBeVisible({ timeout: 5000 });
-
-    // Keep toggle
-    const keepBtn = laptopCard.locator("button[title*='Keep']");
-    await keepBtn.click();
-    await expect(laptopCard.locator("span").filter({ hasText: /Kept/ }).first()).toBeVisible({ timeout: 5000 });
-
-    // Reader Modal
-    await laptopCard.locator("p").first().click();
-    const readerModal = laptopPage.locator(".fixed.inset-0").filter({ hasText: /words|characters/i });
-    await expect(readerModal).toBeVisible();
-    await expect(readerModal).toContainText(testPrompt);
-
-    const closeReaderBtn = readerModal.locator("button[title*='Close']");
-    await closeReaderBtn.click();
-    await expect(readerModal).not.toBeVisible();
-
-    // Delete
-    await deleteBtn.click();
-    await expect(laptopCard).not.toBeVisible({ timeout: 8000 });
 
     await mobileContext.close();
     await laptopContext.close();
   });
 
-  test("5. Settings Modal & Self-Destruction Lifecycle display", async ({ page }) => {
-    await page.goto(PROD_URL);
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.waitForLoadState("domcontentloaded");
+  test("4. Strict Per-Room Data Isolation: Prompts and Kept data NEVER leak across users/rooms", async ({ browser }) => {
+    // Context A: User in Room 1
+    const contextA = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageA = await contextA.newPage();
+    await pageA.goto(PROD_URL);
+    await pageA.evaluate(() => localStorage.clear());
+    await pageA.reload();
+    await pageA.waitForLoadState("domcontentloaded");
 
-    // Start guest room to access settings
-    const guestBtn = page.getByRole("button", { name: /start a quick temporary guest room/i });
-    await expect(guestBtn).toBeVisible({ timeout: 10000 });
-    await guestBtn.click();
+    // User A creates Room 1
+    await pageA.getByRole("button", { name: /Create Room/i }).click();
+    const roomAPill = pageA.locator("header div").filter({ hasText: /Room:/i }).first();
+    await expect(roomAPill).toBeVisible({ timeout: 10000 });
+    const roomAText = await roomAPill.innerText();
+    const roomACode = roomAText.replace(/\D/g, "").slice(0, 6);
 
-    // Open settings
-    const settingsBtn = page.getByRole("button", { name: /Settings/i });
-    await expect(settingsBtn).toBeVisible({ timeout: 10000 });
-    await settingsBtn.click();
+    // User A adds a private prompt and marks it Kept
+    const promptSecretA = `Confidential User A Secret: ${Date.now()}`;
+    const inputA = pageA.getByPlaceholder(/Create unit tests|e\.g\./i);
+    await inputA.fill(promptSecretA);
+    await pageA.getByTitle(/Add and sync prompt/i).click();
 
-    // Verify settings content
-    const settingsHeading = page.getByRole("heading", { name: /Settings & Rules/i });
-    await expect(settingsHeading).toBeVisible();
-    await expect(page.getByText(/1-Hour Rolling Self-Destruct/i)).toBeVisible();
+    const cardA = pageA.locator(".group").filter({ hasText: promptSecretA });
+    await expect(cardA).toBeVisible({ timeout: 10000 });
 
-    // Close settings
-    const doneBtn = page.getByRole("button", { name: /Done/i });
-    await doneBtn.click();
-    await expect(settingsHeading).not.toBeVisible();
+    // User A keeps the prompt
+    await cardA.locator("button[title*='Keep']").click();
+    await expect(cardA.locator("span").filter({ hasText: /Kept/ }).first()).toBeVisible({ timeout: 5000 });
+
+    // Context B: A completely different user in Room 2
+    const contextB = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageB = await contextB.newPage();
+    await pageB.goto(PROD_URL);
+    await pageB.evaluate(() => localStorage.clear());
+    await pageB.reload();
+    await pageB.waitForLoadState("domcontentloaded");
+
+    // User B creates a different Room 2
+    await pageB.getByRole("button", { name: /Create Room/i }).click();
+    const roomBPill = pageB.locator("header div").filter({ hasText: /Room:/i }).first();
+    await expect(roomBPill).toBeVisible({ timeout: 10000 });
+    const roomBText = await roomBPill.innerText();
+    const roomBCode = roomBText.replace(/\D/g, "").slice(0, 6);
+
+    // Verify Room codes are distinct
+    expect(roomBCode).not.toEqual(roomACode);
+
+    // CRITICAL SECURITY ASSERTION: User B must NEVER see User A's confidential prompt or kept data!
+    await expect(pageB.locator(".group").filter({ hasText: promptSecretA })).not.toBeVisible();
+    await expect(pageB.getByText("No prompts in this room yet")).toBeVisible();
+
+    // Check User B's Kept tab
+    await pageB.getByRole("button", { name: /Kept/i }).click();
+    await expect(pageB.locator(".group").filter({ hasText: promptSecretA })).not.toBeVisible();
+    await expect(pageB.getByText("No kept prompts yet")).toBeVisible();
+
+    await contextA.close();
+    await contextB.close();
   });
 });

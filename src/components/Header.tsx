@@ -41,7 +41,7 @@ export function Header({
 
   return (
     <header className="pt-6 pb-4 px-4 sm:px-6 max-w-3xl mx-auto w-full">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         {/* Brand Title */}
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white shadow-sm">
@@ -54,70 +54,40 @@ export function Header({
           </div>
         </div>
 
-        {/* Right Status Indicators */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
-          {/* User Account / Sign In Pill */}
-          {userEmail ? (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
-              <span className="truncate max-w-[120px] sm:max-w-[160px] font-medium" title={userEmail}>
-                {userEmail}
+        {/* Right Status Indicators & Core Actions */}
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap justify-end">
+          {/* PROMINENT "PAIR ROOM / JOIN" BUTTON (Identical on Web & Mobile) */}
+          <button
+            onClick={onOpenPairModal}
+            title="Open Pair Room & Device Join Dialog"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs transition-all cursor-pointer"
+          >
+            <Link2 className="w-3.5 h-3.5 text-blue-600" />
+            <span>Pair Room</span>
+          </button>
+
+          {/* Active Room Code Pill */}
+          {pairCode && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200/90 shadow-2xs">
+              <span className="text-slate-500">Room:</span>
+              <span className="font-mono font-bold tracking-wider text-slate-900">
+                {pairCode}
               </span>
               <button
-                onClick={onSignOut}
-                title="Sign out of account"
-                className="p-0.5 rounded hover:bg-emerald-200 text-emerald-700 transition-colors cursor-pointer"
+                onClick={copyCode}
+                className="ml-0.5 p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                title="Copy Room Code"
               >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={onOpenAuthModal}
-              title="Sign in or create account to save personal rooms"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition-all cursor-pointer shadow-2xs"
-            >
-              <LogIn className="w-3.5 h-3.5 text-blue-600" />
-              <span>Sign In / Up</span>
-            </button>
-          )}
-
-          {/* Pair Code Quick Pill */}
-          {pairCode && (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={onOpenPairModal}
-                title="Click to view or join another room/group code"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 transition-all cursor-pointer shadow-2xs"
-              >
-                <Link2 className="w-3.5 h-3.5 text-slate-500" />
-                <span>Room:</span>
-                <span className="font-mono font-semibold tracking-wider text-slate-900">
-                  {pairCode}
-                </span>
-                <span
-                  onClick={copyCode}
-                  className="ml-1 p-0.5 rounded hover:bg-slate-300 transition-colors"
-                  title="Copy Room Code"
-                >
-                  {copiedCode ? (
-                    <Check className="w-3 h-3 text-emerald-600" />
-                  ) : (
-                    <Copy className="w-3 h-3 text-slate-400 hover:text-slate-700" />
-                  )}
-                </span>
-              </button>
-
-              <button
-                onClick={onLeaveRoom}
-                title="Leave this room and return to gateway"
-                className="p-1.5 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-              >
-                <LogOutIcon className="w-3.5 h-3.5" />
+                {copiedCode ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
               </button>
             </div>
           )}
 
-          {/* Cloud Connection Pill (Eloquent Style "On ☁️") */}
+          {/* Cloud Connection Pill */}
           <div
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
               isConnected
@@ -132,6 +102,42 @@ export function Header({
               <CloudOff className="w-3.5 h-3.5 text-amber-600" />
             )}
           </div>
+
+          {/* Optional User Account Chip / Sign In */}
+          {userEmail ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
+              <span className="truncate max-w-[120px] font-medium" title={userEmail}>
+                {userEmail}
+              </span>
+              <button
+                onClick={onSignOut}
+                title="Sign out of account"
+                className="p-0.5 rounded hover:bg-emerald-200 text-emerald-700 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuthModal}
+              title="Sign in or create account (optional)"
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+            >
+              <LogIn className="w-3.5 h-3.5 text-slate-500" />
+              <span>Login</span>
+            </button>
+          )}
+
+          {/* Leave Room Button */}
+          {pairCode && (
+            <button
+              onClick={onLeaveRoom}
+              title="Leave this room and return to gateway"
+              className="p-1.5 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              <LogOutIcon className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
