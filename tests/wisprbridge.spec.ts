@@ -325,8 +325,9 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
 
     // Sign in on Gateway
     await page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i }).click();
-    await page.getByPlaceholder(/you@example\.com/i).fill(testEmail);
-    await page.getByPlaceholder(/••••••••/i).fill(testPassword);
+    await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('input[type="email"]').fill(testEmail);
+    await page.locator('input[type="password"]').fill(testPassword);
     await page.locator("form").getByRole("button", { name: /Sign In|Sign Up/i }).first().click();
 
     // Verify user enters room with their email in Header
