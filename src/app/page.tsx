@@ -68,6 +68,7 @@ export default function WisprBridgeHome() {
         autoCopyEnabled={autoCopyEnabled}
         onToggleAutoCopy={toggleAutoCopy}
         onOpenPairModal={() => setIsPairModalOpen(true)}
+        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         isSupabaseConfigured={isSupabaseConfigured}
       />
 

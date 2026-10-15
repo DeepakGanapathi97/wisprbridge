@@ -64,7 +64,7 @@ test.describe("WisprBridge Production E2E Suite", () => {
   test("3. End-to-End Cross-Device Sync, Keep, Modal Reader, Copy, and Delete", async ({ browser }) => {
     // Context 1: Mobile sender
     const mobileContext = await browser.newContext({
-      viewport: { width: 390, height: 844 }, // Mobile viewport
+      viewport: { width: 390, height: 844 },
       permissions: ["clipboard-read", "clipboard-write"],
     });
     const mobilePage = await mobileContext.newPage();
@@ -80,7 +80,7 @@ test.describe("WisprBridge Production E2E Suite", () => {
 
     // Context 2: Work Laptop receiver
     const laptopContext = await browser.newContext({
-      viewport: { width: 1440, height: 900 }, // Laptop viewport
+      viewport: { width: 1440, height: 900 },
       permissions: ["clipboard-read", "clipboard-write"],
     });
     const laptopPage = await laptopContext.newPage();
@@ -114,7 +114,7 @@ test.describe("WisprBridge Production E2E Suite", () => {
     await expect(laptopPromptCard).toBeVisible({ timeout: 15000 });
 
     // Verify card metadata: timestamp and TTL or Kept status
-    await expect(laptopPromptCard.locator("span").filter({ hasText: /left|Kept/ })).toBeVisible({ timeout: 10000 });
+    await expect(laptopPromptCard.locator("span").filter({ hasText: /left|Kept/ }).first()).toBeVisible({ timeout: 10000 });
 
     // Verify Copy button is next to Delete button
     const copyBtn = laptopPromptCard.locator("button[title*='Copy']");
@@ -131,7 +131,7 @@ test.describe("WisprBridge Production E2E Suite", () => {
     // STEP E: Test "Keep" toggle (prevents 1-hour self-destruct)
     const keepBtn = laptopPromptCard.locator("button[title*='Keep']");
     await keepBtn.click();
-    await expect(laptopPromptCard.locator("span").filter({ hasText: /Kept/ })).toBeVisible({ timeout: 5000 });
+    await expect(laptopPromptCard.locator("span").filter({ hasText: /Kept/ }).first()).toBeVisible({ timeout: 5000 });
 
     // Check Kept tab filter
     const keptTab = laptopPage.getByRole("button", { name: /Kept/i });
@@ -162,5 +162,64 @@ test.describe("WisprBridge Production E2E Suite", () => {
 
     await mobileContext.close();
     await laptopContext.close();
+  });
+
+  test("4. Settings Modal & Self-Destruction Lifecycle display", async ({ page }) => {
+    await page.goto(PROD_URL);
+    await page.waitForLoadState("domcontentloaded");
+
+    // Open settings via bottom nav on mobile or settings modal
+    const settingsBtn = page.getByRole("button", { name: /Settings/i });
+    await expect(settingsBtn).toBeVisible();
+    await settingsBtn.click();
+
+    // Verify settings content
+    const settingsHeading = page.getByRole("heading", { name: /Settings & Rules/i });
+    await expect(settingsHeading).toBeVisible();
+
+    // Verify 1-hour self destruct rule notice
+    await expect(page.getByText(/1-Hour Rolling Self-Destruct/i)).toBeVisible();
+
+    // Close settings
+    const doneBtn = page.getByRole("button", { name: /Done/i });
+    await doneBtn.click();
+    await expect(settingsHeading).not.toBeVisible();
+  });
+
+  test("5. Multi-prompt sequential streams with counter badges", async ({ page }) => {
+    await page.goto(PROD_URL);
+    await page.waitForLoadState("domcontentloaded");
+
+    // Ensure session is initialized before submitting
+    const roomBtn = page.locator("header button").filter({ hasText: /Room:/i });
+    await expect(roomBtn).toBeVisible({ timeout: 10000 });
+
+    const inputField = page.getByPlaceholder(/Create unit tests|e\.g\./i);
+    const addBtn = page.getByTitle(/Add and sync prompt/i);
+
+    const prompt1 = `Batch Prompt 1: ${Date.now()}`;
+    const prompt2 = `Batch Prompt 2: ${Date.now()}`;
+
+    // Add prompt 1
+    await inputField.fill(prompt1);
+    await addBtn.click();
+    await expect(page.locator(".group").filter({ hasText: prompt1 })).toBeVisible({ timeout: 10000 });
+
+    // Add prompt 2
+    await inputField.fill(prompt2);
+    await addBtn.click();
+    await expect(page.locator(".group").filter({ hasText: prompt2 })).toBeVisible({ timeout: 10000 });
+
+    // Verify counter badge on tab reflects multiple prompts
+    const allTab = page.getByRole("button", { name: /All prompts/i });
+    await expect(allTab).toContainText("2");
+
+    // Clean up prompts
+    const deleteButtons = page.locator("button[title*='Delete']");
+    const count = await deleteButtons.count();
+    for (let i = 0; i < count; i++) {
+      await deleteButtons.first().click();
+      await page.waitForTimeout(600);
+    }
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Cloud, CloudOff, Sparkles, Laptop, Link2, Copy, Check } from "lucide-react";
+import { Cloud, CloudOff, Sparkles, Laptop, Link2, Copy, Check, Settings } from "lucide-react";
 
 interface HeaderProps {
   isConnected: boolean;
@@ -9,6 +9,7 @@ interface HeaderProps {
   autoCopyEnabled: boolean;
   onToggleAutoCopy: () => void;
   onOpenPairModal: () => void;
+  onOpenSettingsModal: () => void;
   isSupabaseConfigured: boolean;
 }
 
@@ -18,6 +19,7 @@ export function Header({
   autoCopyEnabled,
   onToggleAutoCopy,
   onOpenPairModal,
+  onOpenSettingsModal,
   isSupabaseConfigured,
 }: HeaderProps) {
   const [copiedCode, setCopiedCode] = React.useState(false);
@@ -96,22 +98,34 @@ export function Header({
           Speak with Whisper Flow on mobile — syncs live with your laptop terminal.
         </p>
 
-        {/* Laptop Auto-Copy Switch */}
-        <button
-          onClick={onToggleAutoCopy}
-          className={`self-start sm:self-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border cursor-pointer ${
-            autoCopyEnabled
-              ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-          }`}
-          title="Automatically copies incoming prompts to laptop clipboard when browser tab is active"
-        >
-          <Laptop className={`w-3.5 h-3.5 ${autoCopyEnabled ? "text-emerald-600" : "text-slate-400"}`} />
-          <span>Auto-Copy:</span>
-          <span className={`font-semibold ${autoCopyEnabled ? "text-emerald-700" : "text-slate-500"}`}>
-            {autoCopyEnabled ? "ON" : "OFF"}
-          </span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Laptop Auto-Copy Switch */}
+          <button
+            onClick={onToggleAutoCopy}
+            className={`self-start sm:self-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border cursor-pointer ${
+              autoCopyEnabled
+                ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+            title="Automatically copies incoming prompts to laptop clipboard when browser tab is active"
+          >
+            <Laptop className={`w-3.5 h-3.5 ${autoCopyEnabled ? "text-emerald-600" : "text-slate-400"}`} />
+            <span>Auto-Copy:</span>
+            <span className={`font-semibold ${autoCopyEnabled ? "text-emerald-700" : "text-slate-500"}`}>
+              {autoCopyEnabled ? "ON" : "OFF"}
+            </span>
+          </button>
+
+          {/* Desktop Settings Button */}
+          <button
+            onClick={onOpenSettingsModal}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+            title="Settings & 1-Hour Self-Destruct rules"
+          >
+            <Settings className="w-3.5 h-3.5 text-slate-500" />
+            <span>Settings</span>
+          </button>
+        </div>
       </div>
 
       {!isSupabaseConfigured && (
