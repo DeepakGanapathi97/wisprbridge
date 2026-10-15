@@ -320,7 +320,7 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
-    const testEmail = `wispr_auth_${Date.now()}@test.com`;
+    const testEmail = "wispr_test@test.com";
     const testPassword = "TestPassword123!";
 
     // Sign in on Gateway
