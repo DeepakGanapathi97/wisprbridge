@@ -42,17 +42,6 @@ export default function WisprBridgeHome() {
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  // Check URL query parameters for ?code= or ?room= auto-pairing
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const codeParam = params.get("code") || params.get("room");
-      if (codeParam && codeParam.length === 6) {
-        pairWithCode(codeParam);
-      }
-    }
-  }, [pairWithCode]);
-
   // Handle copy with optional light particle effect
   const handleCopy = (text: string, id: string) => {
     copyToClipboard(text, id);

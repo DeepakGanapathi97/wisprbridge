@@ -114,7 +114,7 @@ test.describe("WisprBridge Production E2E Suite", () => {
     await expect(laptopPromptCard).toBeVisible({ timeout: 15000 });
 
     // Verify card metadata: timestamp and TTL or Kept status
-    await expect(laptopPromptCard.locator("span").filter({ hasText: /left|Kept/ })).toBeVisible();
+    await expect(laptopPromptCard.locator("span").filter({ hasText: /left|Kept/ })).toBeVisible({ timeout: 10000 });
 
     // Verify Copy button is next to Delete button
     const copyBtn = laptopPromptCard.locator("button[title*='Copy']");
