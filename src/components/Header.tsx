@@ -43,18 +43,13 @@ export function Header({
     <header className="pt-6 pb-4 px-4 sm:px-6 max-w-3xl mx-auto w-full">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         {/* Left: Brand Identity + Subtitle */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white shadow-sm shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-none">
-              WisprBridge
-            </h1>
-            <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium">
-              WisprFlow / Eloquent on one device — syncs live with the others
-            </p>
-          </div>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-none">
+            WisprBridge
+          </h1>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium">
+            WisprFlow / Eloquent on one device — syncs live with the others
+          </p>
         </div>
 
         {/* Right: Consolidated Controls (Single Clean Row) */}

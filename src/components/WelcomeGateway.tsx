@@ -101,11 +101,7 @@ export function WelcomeGateway({
         )}
       </div>
 
-      {/* Brand Hero */}
-      <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white shadow-md mb-3">
-        <Sparkles className="w-7 h-7" />
-      </div>
-
+      {/* Brand Title */}
       <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-center">
         WisprBridge
       </h1>

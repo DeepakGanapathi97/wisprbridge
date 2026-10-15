@@ -13,9 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WisprBridge — Real-time Speech-to-Terminal Prompt Bridge",
-  description:
-    "Dictate with Whisper Flow on mobile, sync live to your corporate laptop terminal in sub-seconds with 1-click & auto-copy.",
+  title: "WisprBridge",
+  description: "WisprFlow / Eloquent sync bridge.",
   icons: {
     icon: "/favicon.ico",
   },

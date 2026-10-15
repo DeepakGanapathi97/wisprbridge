@@ -55,18 +55,13 @@ export function AuthModal({ isOpen, onClose, onSignInOrSignUp }: AuthModalProps)
       >
         {/* Modal Top Bar */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">
-                {isSignUp ? "Create Your Account" : "Sign In to WisprBridge"}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {isSignUp ? "Private rooms & saved prompts" : "Access your private rooms"}
-              </p>
-            </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">
+              {isSignUp ? "Create Your Account" : "Sign In to WisprBridge"}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {isSignUp ? "Private rooms & saved prompts" : "Access your private rooms"}
+            </p>
           </div>
           <button
             onClick={onClose}
