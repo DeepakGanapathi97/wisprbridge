@@ -440,13 +440,14 @@ export function useWisprBridge() {
           activeSession = data as Session;
         }
       } else if (forceGuestCreate) {
-        // Explicitly requested guest room
+        // Explicitly requested room creation
         const newCode = generateRandomCode();
         const { data, error } = await supabase
           .from("wispr_sessions")
           .insert({
             pair_code: newCode,
-            device_label: "Wispr Guest Session",
+            device_label: user ? `Wispr Room (${user.email})` : "Wispr Guest Session",
+            user_id: user?.id ?? null,
           })
           .select()
           .single();

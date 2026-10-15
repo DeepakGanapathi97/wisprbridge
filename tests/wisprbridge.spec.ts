@@ -242,4 +242,74 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
     await mobileContext.close();
     await laptopContext.close();
   });
+
+  test("6. Guest User Option Isolation & Leave Room: No Login button visible in room, Leave Room cleanly exits to Gateway", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(PROD_URL);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+
+    // Enter room as guest
+    await page.getByRole("button", { name: /Create Room/i }).click();
+    await expect(page.locator("header div").filter({ hasText: /Room:/i }).first()).toBeVisible({ timeout: 10000 });
+
+    // SECURITY & UX ASSERTION: In guest mode, user should NOT see Login button or distracting account options
+    await expect(page.getByRole("button", { name: /^Login$/i })).not.toBeVisible();
+    await expect(page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i })).not.toBeVisible();
+
+    // Prominent "Leave Room" button IS visible
+    const leaveBtn = page.getByRole("button", { name: /Leave Room/i });
+    await expect(leaveBtn).toBeVisible();
+
+    // Clicking "Leave Room" logs out of the room and returns cleanly to Gateway
+    await leaveBtn.click();
+    await expect(page.getByRole("heading", { name: /Join a Room \/ Device/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /Create a New Room/i })).toBeVisible();
+  });
+
+  test("7. Cloud DB Storage: Guest room prompts are stored in Supabase DB under session_id and persist across reconnects", async ({ browser }) => {
+    // Context 1: Device A creates room and posts prompt
+    const contextA = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pageA = await contextA.newPage();
+    await pageA.goto(PROD_URL);
+    await pageA.evaluate(() => localStorage.clear());
+    await pageA.reload();
+    await pageA.waitForLoadState("domcontentloaded");
+
+    await pageA.getByRole("button", { name: /Create Room/i }).click();
+    const roomPill = pageA.locator("header div").filter({ hasText: /Room:/i }).first();
+    await expect(roomPill).toBeVisible({ timeout: 10000 });
+    const pairCode = (await roomPill.innerText()).replace(/\D/g, "").slice(0, 6);
+
+    const testPromptText = `Database Persisted Prompt ${Date.now()}: Stored in Supabase`;
+    const inputA = pageA.getByPlaceholder(/Create unit tests|e\.g\./i);
+    await inputA.fill(testPromptText);
+    await pageA.getByTitle(/Add and sync prompt/i).click();
+    await expect(pageA.locator(".group").filter({ hasText: testPromptText })).toBeVisible({ timeout: 10000 });
+
+    // Context 2: Device B joins the exact same room code as a guest
+    const contextB = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const pageB = await contextB.newPage();
+    await pageB.goto(`${PROD_URL}?code=${pairCode}`);
+    await pageB.waitForLoadState("domcontentloaded");
+
+    // Device B should immediately see Device A's prompt loaded from Supabase DB
+    await expect(pageB.locator(".group").filter({ hasText: testPromptText })).toBeVisible({ timeout: 15000 });
+
+    // Device A clicks Leave Room to exit room
+    await pageA.getByRole("button", { name: /Leave Room/i }).click();
+    await expect(pageA.getByRole("heading", { name: /Join a Room \/ Device/i })).toBeVisible({ timeout: 5000 });
+
+    // Device A re-enters the room code
+    const inputCode = pageA.getByPlaceholder(/e\.g\. 582194/i);
+    await inputCode.fill(pairCode);
+    await pageA.getByRole("button", { name: /Join Room/i }).click();
+
+    // PROMPT IS STILL THERE from Supabase DB!
+    await expect(pageA.locator(".group").filter({ hasText: testPromptText })).toBeVisible({ timeout: 15000 });
+
+    await contextA.close();
+    await contextB.close();
+  });
 });

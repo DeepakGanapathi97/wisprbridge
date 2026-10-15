@@ -105,39 +105,32 @@ export function Header({
             )}
           </div>
 
-          {/* Optional User Account Chip / Sign In */}
-          {userEmail ? (
+          {/* Authenticated User Account Chip */}
+          {userEmail && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
               <span className="truncate max-w-[120px] font-medium" title={userEmail}>
                 {userEmail}
               </span>
               <button
                 onClick={onSignOut}
-                title="Sign out of account"
-                className="p-0.5 rounded hover:bg-emerald-200 text-emerald-700 transition-colors cursor-pointer"
+                title="Sign out of your account"
+                className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded-full transition-colors cursor-pointer"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-3 h-3" />
+                <span>Sign Out</span>
               </button>
             </div>
-          ) : (
-            <button
-              onClick={onOpenAuthModal}
-              title="Sign in or create account (optional)"
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 transition-all cursor-pointer shadow-2xs"
-            >
-              <LogIn className="w-3.5 h-3.5 text-slate-500" />
-              <span>Login</span>
-            </button>
           )}
 
-          {/* Leave Room Button */}
+          {/* Leave / Exit Room Button (Always available in room) */}
           {pairCode && (
             <button
               onClick={onLeaveRoom}
               title="Leave this room and return to gateway"
-              className="p-1.5 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 shadow-2xs transition-all cursor-pointer"
             >
-              <LogOutIcon className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5 text-red-600" />
+              <span>Leave Room</span>
             </button>
           )}
         </div>
@@ -176,15 +169,17 @@ export function Header({
             </span>
           )}
 
-          {/* Desktop Settings Button */}
-          <button
-            onClick={onOpenSettingsModal}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
-            title="Settings & 1-Hour Self-Destruct rules"
-          >
-            <Settings className="w-3.5 h-3.5 text-slate-500" />
-            <span>Settings</span>
-          </button>
+          {/* Desktop Settings Button (Visible for authenticated users or in detailed mode) */}
+          {userEmail && (
+            <button
+              onClick={onOpenSettingsModal}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+              title="Settings & 1-Hour Self-Destruct rules"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+              <span>Settings</span>
+            </button>
+          )}
         </div>
       </div>
 

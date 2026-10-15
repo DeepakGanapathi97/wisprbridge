@@ -196,6 +196,8 @@ export default function WisprBridgeHome() {
           <BottomNav
             onOpenPairModal={() => setIsPairModalOpen(true)}
             onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+            onLeaveRoom={leaveRoom}
+            userEmail={user?.email}
           />
         </>
       )}
