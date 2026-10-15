@@ -111,7 +111,7 @@ export function useWisprBridge() {
     try {
       const nowIso = new Date().toISOString();
       const { data, error } = await supabase
-        .from("prompts")
+        .from("wispr_prompts")
         .select("*")
         .eq("session_id", sessionId)
         .or(`is_kept.eq.true,expires_at.gt.${nowIso}`)
@@ -165,7 +165,7 @@ export function useWisprBridge() {
       if (forcedPairCode) {
         // Pairing with specific code
         const { data, error } = await supabase
-          .from("sessions")
+          .from("wispr_sessions")
           .select("*")
           .eq("pair_code", forcedPairCode)
           .eq("is_active", true)
@@ -179,7 +179,7 @@ export function useWisprBridge() {
         const savedSessionId = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
         if (savedSessionId) {
           const { data } = await supabase
-            .from("sessions")
+            .from("wispr_sessions")
             .select("*")
             .eq("id", savedSessionId)
             .eq("is_active", true)
@@ -194,7 +194,7 @@ export function useWisprBridge() {
         if (!activeSession) {
           const newCode = generateRandomCode();
           const { data, error } = await supabase
-            .from("sessions")
+            .from("wispr_sessions")
             .insert({
               pair_code: newCode,
               device_label: "Wispr Mobile Session",
@@ -281,7 +281,7 @@ export function useWisprBridge() {
 
     try {
       const { data, error } = await supabase
-        .from("prompts")
+        .from("wispr_prompts")
         .insert({
           session_id: session.id,
           text: trimmed,
@@ -325,7 +325,7 @@ export function useWisprBridge() {
     }
 
     try {
-      await supabase.from("prompts").update({ is_kept: nextStatus }).eq("id", id);
+      await supabase.from("wispr_prompts").update({ is_kept: nextStatus }).eq("id", id);
     } catch (err) {
       console.error("Keep update error:", err);
     }
@@ -351,7 +351,7 @@ export function useWisprBridge() {
     }
 
     try {
-      await supabase.from("prompts").delete().eq("id", id);
+      await supabase.from("wispr_prompts").delete().eq("id", id);
     } catch (err) {
       console.error("Delete prompt error:", err);
     }
@@ -373,7 +373,7 @@ export function useWisprBridge() {
         {
           event: "INSERT",
           schema: "public",
-          table: "prompts",
+          table: "wispr_prompts",
           filter: `session_id=eq.${session.id}`,
         },
         (payload) => {
@@ -395,7 +395,7 @@ export function useWisprBridge() {
         {
           event: "UPDATE",
           schema: "public",
-          table: "prompts",
+          table: "wispr_prompts",
           filter: `session_id=eq.${session.id}`,
         },
         (payload) => {
@@ -411,7 +411,7 @@ export function useWisprBridge() {
         {
           event: "DELETE",
           schema: "public",
-          table: "prompts",
+          table: "wispr_prompts",
           filter: `session_id=eq.${session.id}`,
         },
         (payload) => {
