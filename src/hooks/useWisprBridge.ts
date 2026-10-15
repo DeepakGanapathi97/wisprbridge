@@ -134,9 +134,18 @@ export function useWisprBridge() {
   const initSession = useCallback(async (forcedPairCode?: string) => {
     setLoading(true);
 
+    let targetPairCode = forcedPairCode;
+    if (!targetPairCode && typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlCode = urlParams.get("code") || urlParams.get("room");
+      if (urlCode && urlCode.replace(/\D/g, "").length === 6) {
+        targetPairCode = urlCode.replace(/\D/g, "");
+      }
+    }
+
     if (!isSupabaseConfigured() || !supabase) {
       // Local simulation mode
-      let activeCode = forcedPairCode || localStorage.getItem(LOCAL_STORAGE_PAIR_CODE_KEY);
+      let activeCode = targetPairCode || localStorage.getItem(LOCAL_STORAGE_PAIR_CODE_KEY);
       if (!activeCode) {
         activeCode = generateRandomCode();
       }
@@ -162,12 +171,12 @@ export function useWisprBridge() {
     try {
       let activeSession: Session | null = null;
 
-      if (forcedPairCode) {
+      if (targetPairCode) {
         // Pairing with specific code
         const { data, error } = await supabase
           .from("wispr_sessions")
           .select("*")
-          .eq("pair_code", forcedPairCode)
+          .eq("pair_code", targetPairCode)
           .eq("is_active", true)
           .single();
 
