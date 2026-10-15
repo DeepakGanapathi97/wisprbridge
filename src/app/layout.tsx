@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "WisprBridge",
-  description: "WisprFlow / Eloquent sync bridge.",
+  description: "Speak prompts on mobile — syncs live to your laptop & clipboard.",
   icons: {
     icon: "/favicon.ico",
   },

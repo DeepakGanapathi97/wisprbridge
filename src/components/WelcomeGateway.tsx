@@ -106,7 +106,7 @@ export function WelcomeGateway({
         WisprBridge
       </h1>
       <p className="text-xs sm:text-sm text-slate-500 text-center max-w-sm mt-1 leading-relaxed">
-        WisprFlow / Eloquent on one device — syncs live with the others. No login required—just pair two devices.
+        Speak prompts on mobile — syncs live to your laptop &amp; clipboard. No login required—just pair two devices.
       </p>
 
       {/* ACTIVE ROOMS DASHBOARD (Visible to Authenticated Users) */}

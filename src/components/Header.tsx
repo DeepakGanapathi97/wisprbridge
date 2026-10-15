@@ -48,7 +48,7 @@ export function Header({
             WisprBridge
           </h1>
           <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium">
-            WisprFlow / Eloquent on one device — syncs live with the others
+            Speak prompts on mobile — syncs live to your laptop &amp; clipboard
           </p>
         </div>
 
