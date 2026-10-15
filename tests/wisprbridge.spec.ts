@@ -312,4 +312,40 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
     await contextA.close();
     await contextB.close();
   });
+
+  test("8. Authenticated User Flow: Leaving room does NOT log out account; Gateway retains signed in state", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(PROD_URL);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+
+    const testEmail = `wispr_auth_${Date.now()}@test.com`;
+    const testPassword = "TestPassword123!";
+
+    // Sign in on Gateway
+    await page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i }).click();
+    await page.getByPlaceholder(/you@example\.com/i).fill(testEmail);
+    await page.getByPlaceholder(/••••••••/i).fill(testPassword);
+    await page.locator("form").getByRole("button", { name: /Sign In|Sign Up/i }).first().click();
+
+    // Verify user enters room with their email in Header
+    await expect(page.locator("header").filter({ hasText: testEmail })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: /Sign Out/i })).toBeVisible();
+
+    // Click Leave Room
+    const leaveBtn = page.getByRole("button", { name: /Leave Room/i });
+    await expect(leaveBtn).toBeVisible();
+    await leaveBtn.click();
+
+    // CRITICAL FIX ASSERTION: Gateway must show the user is STILL signed in, NOT logged out!
+    await expect(page.getByText(new RegExp(`Signed in as.*${testEmail}`, "i"))).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i })).not.toBeVisible();
+
+    // Click Sign Out on Gateway
+    await page.getByRole("button", { name: /Sign Out/i }).click();
+
+    // Now user is logged out and Gateway displays Sign In option again
+    await expect(page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i })).toBeVisible({ timeout: 5000 });
+  });
 });

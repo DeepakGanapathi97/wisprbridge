@@ -79,6 +79,8 @@ export default function WisprBridgeHome() {
             onJoinRoom={pairWithCode}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}
             onStartGuestRoom={startGuestRoom}
+            userEmail={user?.email}
+            onSignOut={signOut}
           />
         </main>
       ) : !isInRoom && loading ? (

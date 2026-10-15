@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Cloud, CloudOff, Sparkles, Laptop, Link2, Copy, Check, Settings, LogIn, LogOut, LogOutIcon } from "lucide-react";
+import { Sparkles, Laptop, Link2, Copy, Check, Settings, LogOut } from "lucide-react";
 
 interface HeaderProps {
   isConnected: boolean;
@@ -11,7 +11,7 @@ interface HeaderProps {
   onToggleAutoCopy: () => void;
   onOpenPairModal: () => void;
   onOpenSettingsModal: () => void;
-  onOpenAuthModal: () => void;
+  onOpenAuthModal?: () => void;
   userEmail?: string | null;
   onSignOut: () => void;
   onLeaveRoom: () => void;
@@ -19,14 +19,12 @@ interface HeaderProps {
 }
 
 export function Header({
-  isConnected,
   pairCode,
   autoCopyEnabled,
   hasPendingAutoCopy,
   onToggleAutoCopy,
   onOpenPairModal,
   onOpenSettingsModal,
-  onOpenAuthModal,
   userEmail,
   onSignOut,
   onLeaveRoom,
@@ -43,32 +41,35 @@ export function Header({
 
   return (
     <header className="pt-6 pb-4 px-4 sm:px-6 max-w-3xl mx-auto w-full">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* Brand Title */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white shadow-sm">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        {/* Left: Brand Identity + Subtitle */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white shadow-sm shrink-0">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-none">
               WisprBridge
             </h1>
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium">
+              WisprFlow / Eloquent on one device — syncs live with the others
+            </p>
           </div>
         </div>
 
-        {/* Right Status Indicators & Core Actions */}
+        {/* Right: Consolidated Controls (Single Clean Row) */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap justify-end">
-          {/* PROMINENT "PAIR ROOM / JOIN" BUTTON (Identical on Web & Mobile) */}
+          {/* Pair Room Button */}
           <button
             onClick={onOpenPairModal}
             title="Open Pair Room & Device Join Dialog"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/90 shadow-2xs transition-all cursor-pointer"
           >
             <Link2 className="w-3.5 h-3.5 text-blue-600" />
             <span>Pair Room</span>
           </button>
 
-          {/* Active Room Code Pill */}
+          {/* Active Room Code Pill with Copy */}
           {pairCode && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200/90 shadow-2xs">
               <span className="text-slate-500">Room:</span>
@@ -89,21 +90,32 @@ export function Header({
             </div>
           )}
 
-          {/* Cloud Connection Pill */}
-          <div
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-              isConnected
-                ? "bg-sky-100/90 text-sky-800 border border-sky-200/90 shadow-2xs"
-                : "bg-amber-100 text-amber-800 border border-amber-200"
+          {/* Auto-Copy Toggle Switch */}
+          <button
+            onClick={onToggleAutoCopy}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border cursor-pointer shadow-2xs ${
+              autoCopyEnabled
+                ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
             }`}
+            title="Automatically copies incoming prompts to laptop clipboard when browser tab is active"
           >
-            <span>{isConnected ? "On" : "Syncing"}</span>
-            {isConnected ? (
-              <Cloud className="w-3.5 h-3.5 text-sky-600 fill-sky-600/30" />
-            ) : (
-              <CloudOff className="w-3.5 h-3.5 text-amber-600" />
-            )}
-          </div>
+            <Laptop className={`w-3.5 h-3.5 ${autoCopyEnabled ? "text-emerald-600" : "text-slate-400"}`} />
+            <span>Auto-Copy:</span>
+            <span className={`font-semibold ${autoCopyEnabled ? "text-emerald-700" : "text-slate-500"}`}>
+              {autoCopyEnabled ? "ON" : "OFF"}
+            </span>
+          </button>
+
+          {/* Pending Auto-Copy Pill if Window is waiting for focus click */}
+          {hasPendingAutoCopy && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-full animate-pulse shadow-2xs"
+              title="Click anywhere in this window to copy pending prompt to clipboard"
+            >
+              ⚡ Click window to copy
+            </span>
+          )}
 
           {/* Authenticated User Account Chip */}
           {userEmail && (
@@ -122,7 +134,19 @@ export function Header({
             </div>
           )}
 
-          {/* Leave / Exit Room Button (Always available in room) */}
+          {/* Settings Button (Only if authenticated) */}
+          {userEmail && (
+            <button
+              onClick={onOpenSettingsModal}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+              title="Settings & 1-Hour Self-Destruct rules"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-500" />
+              <span>Settings</span>
+            </button>
+          )}
+
+          {/* Leave Room Button */}
           {pairCode && (
             <button
               onClick={onLeaveRoom}
@@ -131,53 +155,6 @@ export function Header({
             >
               <LogOut className="w-3.5 h-3.5 text-red-600" />
               <span>Leave Room</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Subtitle / Helper description */}
-      <div className="mt-2.5 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 gap-2">
-        <p>
-          Speak with Whisper Flow on mobile — syncs live with your laptop terminal.
-        </p>
-
-        <div className="flex items-center gap-2">
-          {/* Laptop Auto-Copy Switch */}
-          <button
-            onClick={onToggleAutoCopy}
-            className={`self-start sm:self-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border cursor-pointer ${
-              autoCopyEnabled
-                ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            }`}
-            title="Automatically copies incoming prompts to laptop clipboard when browser tab is active"
-          >
-            <Laptop className={`w-3.5 h-3.5 ${autoCopyEnabled ? "text-emerald-600" : "text-slate-400"}`} />
-            <span>Auto-Copy:</span>
-            <span className={`font-semibold ${autoCopyEnabled ? "text-emerald-700" : "text-slate-500"}`}>
-              {autoCopyEnabled ? "ON" : "OFF"}
-            </span>
-          </button>
-
-          {hasPendingAutoCopy && (
-            <span
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-full animate-pulse shadow-2xs"
-              title="Click anywhere in this window to copy pending prompt to clipboard"
-            >
-              ⚡ Click window to copy
-            </span>
-          )}
-
-          {/* Desktop Settings Button (Visible for authenticated users or in detailed mode) */}
-          {userEmail && (
-            <button
-              onClick={onOpenSettingsModal}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
-              title="Settings & 1-Hour Self-Destruct rules"
-            >
-              <Settings className="w-3.5 h-3.5 text-slate-500" />
-              <span>Settings</span>
             </button>
           )}
         </div>

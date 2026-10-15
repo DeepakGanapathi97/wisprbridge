@@ -1,18 +1,22 @@
 "use client";
 
 import React, { useState } from "react";
-import { Sparkles, Laptop, PlusCircle, ArrowRight, ShieldCheck, LogIn } from "lucide-react";
+import { Sparkles, Laptop, PlusCircle, ArrowRight, ShieldCheck, LogIn, LogOut } from "lucide-react";
 
 interface WelcomeGatewayProps {
   onJoinRoom: (code: string) => Promise<boolean>;
   onOpenAuthModal: () => void;
   onStartGuestRoom: () => void;
+  userEmail?: string | null;
+  onSignOut?: () => void;
 }
 
 export function WelcomeGateway({
   onJoinRoom,
   onOpenAuthModal,
   onStartGuestRoom,
+  userEmail,
+  onSignOut,
 }: WelcomeGatewayProps) {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,15 +32,31 @@ export function WelcomeGateway({
 
   return (
     <div className="max-w-xl mx-auto w-full px-4 sm:px-6 my-auto py-8 sm:py-12 flex flex-col items-center">
-      {/* Top Bar with Optional Sign In */}
+      {/* Top Bar with Optional Sign In or Authenticated Status */}
       <div className="w-full flex items-center justify-end mb-4">
-        <button
-          onClick={onOpenAuthModal}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-2xs transition-all cursor-pointer"
-        >
-          <LogIn className="w-3.5 h-3.5 text-blue-600" />
-          <span>Sign In / Sign Up (Optional)</span>
-        </button>
+        {userEmail ? (
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+            <span>Signed in as <strong className="font-semibold">{userEmail}</strong></span>
+            {onSignOut && (
+              <button
+                onClick={onSignOut}
+                className="ml-1 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-950 underline cursor-pointer"
+                title="Sign out of your account"
+              >
+                <LogOut className="w-3 h-3" />
+                <span>Sign Out</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={onOpenAuthModal}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-2xs transition-all cursor-pointer"
+          >
+            <LogIn className="w-3.5 h-3.5 text-blue-600" />
+            <span>Sign In / Sign Up (Optional)</span>
+          </button>
+        )}
       </div>
 
       {/* Brand Hero */}
@@ -48,7 +68,7 @@ export function WelcomeGateway({
         WisprBridge
       </h1>
       <p className="text-xs sm:text-sm text-slate-500 text-center max-w-sm mt-1 leading-relaxed">
-        Real-time voice prompt sync between mobile and laptop. No login required—just pair two devices.
+        WisprFlow / Eloquent on one device — syncs live with the others. No login required—just pair two devices.
       </p>
 
       {/* Two Primary Action Cards */}
@@ -106,7 +126,9 @@ export function WelcomeGateway({
                   Create a New Room
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Start a private room and get a 6-digit code to pair with your laptop
+                  {userEmail
+                    ? `Start a private room linked to your account (${userEmail})`
+                    : "Start a private room and get a 6-digit code to pair with your laptop"}
                 </p>
               </div>
             </div>
