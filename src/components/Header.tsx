@@ -7,6 +7,7 @@ interface HeaderProps {
   isConnected: boolean;
   pairCode: string;
   autoCopyEnabled: boolean;
+  hasPendingAutoCopy?: boolean;
   onToggleAutoCopy: () => void;
   onOpenPairModal: () => void;
   onOpenSettingsModal: () => void;
@@ -21,6 +22,7 @@ export function Header({
   isConnected,
   pairCode,
   autoCopyEnabled,
+  hasPendingAutoCopy,
   onToggleAutoCopy,
   onOpenPairModal,
   onOpenSettingsModal,
@@ -164,6 +166,15 @@ export function Header({
               {autoCopyEnabled ? "ON" : "OFF"}
             </span>
           </button>
+
+          {hasPendingAutoCopy && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-full animate-pulse shadow-2xs"
+              title="Click anywhere in this window to copy pending prompt to clipboard"
+            >
+              ⚡ Click window to copy
+            </span>
+          )}
 
           {/* Desktop Settings Button */}
           <button

@@ -18,13 +18,16 @@ export function useWisprBridge() {
   const [loading, setLoading] = useState<boolean>(true);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [autoCopyEnabled, setAutoCopyEnabled] = useState<boolean>(false);
+  const [hasPendingAutoCopy, setHasPendingAutoCopy] = useState<boolean>(false);
   const [copyFeedbackId, setCopyFeedbackId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "kept">("all");
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  const lastPromptIdRef = useRef<string | null>(null);
+  const pendingCopyRef = useRef<{ id?: string; text: string } | null>(null);
+  const lastAutoCopiedIdRef = useRef<string | null>(null);
+  const isInitialFetchRef = useRef<boolean>(true);
   const autoCopyRef = useRef<boolean>(false);
   autoCopyRef.current = autoCopyEnabled;
 
@@ -34,6 +37,158 @@ export function useWisprBridge() {
       setToastMessage((prev) => (prev === msg ? null : prev));
     }, 3200);
   }, []);
+
+  // Web Audio pleasant confirmation chime
+  const playAutoCopyChime = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.08); // A5
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.22);
+    } catch {
+      // Audio might be constrained until first user gesture; safe to ignore
+    }
+  }, []);
+
+  // Robust clipboard writer (Async Clipboard API + execCommand fallback)
+  const writeToSystemClipboard = useCallback(async (text: string): Promise<boolean> => {
+    // 1. Try modern async Clipboard API
+    if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (err) {
+        console.warn("navigator.clipboard.writeText blocked or failed, attempting fallback:", err);
+      }
+    }
+
+    // 2. Fallback to synchronous textarea execCommand('copy')
+    if (typeof document !== "undefined") {
+      try {
+        const el = document.createElement("textarea");
+        el.value = text;
+        el.setAttribute("readonly", "");
+        el.style.position = "fixed";
+        el.style.top = "-9999px";
+        el.style.left = "-9999px";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.focus();
+        el.select();
+        const success = document.execCommand("copy");
+        document.body.removeChild(el);
+        if (success) return true;
+      } catch (err) {
+        console.warn("execCommand fallback failed:", err);
+      }
+    }
+
+    return false;
+  }, []);
+
+  // Increment copied_count for metrics
+  const incrementCopiedCount = useCallback((id: string) => {
+    setPrompts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, copied_count: (p.copied_count || 0) + 1 } : p))
+    );
+    if (isSupabaseConfigured() && supabase) {
+      const client = supabase;
+      client
+        .from("wispr_prompts")
+        .select("copied_count")
+        .eq("id", id)
+        .single()
+        .then(({ data }) => {
+          const currentCount = data?.copied_count ?? 0;
+          client
+            .from("wispr_prompts")
+            .update({ copied_count: currentCount + 1 })
+            .eq("id", id)
+            .then();
+        });
+    }
+  }, []);
+
+  // Centralized auto-copy execution
+  const handleAutoCopy = useCallback(
+    async (prompt: Prompt) => {
+      if (!autoCopyRef.current) return;
+      if (lastAutoCopiedIdRef.current === prompt.id) return;
+
+      const ok = await writeToSystemClipboard(prompt.text);
+      if (ok) {
+        lastAutoCopiedIdRef.current = prompt.id;
+        pendingCopyRef.current = null;
+        setHasPendingAutoCopy(false);
+        setCopyFeedbackId(prompt.id);
+        setTimeout(() => {
+          setCopyFeedbackId((curr) => (curr === prompt.id ? null : curr));
+        }, 2000);
+        showToast("⚡ Auto-copied to clipboard! Ready to paste (Ctrl+V)");
+        playAutoCopyChime();
+        incrementCopiedCount(prompt.id);
+      } else {
+        // Tab not focused; queue for auto-copy upon window focus or click
+        pendingCopyRef.current = { id: prompt.id, text: prompt.text };
+        setHasPendingAutoCopy(true);
+        showToast("⚡ New prompt waiting — click window to copy to clipboard");
+      }
+    },
+    [showToast, playAutoCopyChime, writeToSystemClipboard, incrementCopiedCount]
+  );
+
+  // Focus and user gesture listener to flush any pending auto-copy
+  useEffect(() => {
+    const flushPendingCopy = async () => {
+      if (!pendingCopyRef.current || !autoCopyRef.current) return;
+      const target = pendingCopyRef.current;
+      const ok = await writeToSystemClipboard(target.text);
+      if (ok) {
+        if (target.id) {
+          lastAutoCopiedIdRef.current = target.id;
+          setCopyFeedbackId(target.id);
+          setTimeout(() => {
+            setCopyFeedbackId((curr) => (curr === target.id ? null : curr));
+          }, 2000);
+          incrementCopiedCount(target.id);
+        }
+        pendingCopyRef.current = null;
+        setHasPendingAutoCopy(false);
+        showToast("⚡ Auto-copied to clipboard! Ready to paste (Ctrl+V)");
+        playAutoCopyChime();
+      }
+    };
+
+    window.addEventListener("focus", flushPendingCopy);
+    window.addEventListener("pointerdown", flushPendingCopy);
+    window.addEventListener("keydown", flushPendingCopy);
+    const handleVis = () => {
+      if (document.visibilityState === "visible") {
+        flushPendingCopy();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVis);
+
+    return () => {
+      window.removeEventListener("focus", flushPendingCopy);
+      window.removeEventListener("pointerdown", flushPendingCopy);
+      window.removeEventListener("keydown", flushPendingCopy);
+      document.removeEventListener("visibilitychange", handleVis);
+    };
+  }, [showToast, playAutoCopyChime, writeToSystemClipboard, incrementCopiedCount]);
 
   // Initialize autoCopy preference
   useEffect(() => {
@@ -46,89 +201,137 @@ export function useWisprBridge() {
   const toggleAutoCopy = useCallback(() => {
     setAutoCopyEnabled((prev) => {
       const next = !prev;
+      autoCopyRef.current = next;
       localStorage.setItem(LOCAL_STORAGE_AUTO_COPY_KEY, String(next));
-      showToast(next ? "Auto-Copy enabled: Incoming prompts copy instantly" : "Auto-Copy disabled");
+
+      if (next) {
+        // When enabled in active user gesture, immediately flush pending or copy newest prompt
+        if (pendingCopyRef.current) {
+          const target = pendingCopyRef.current;
+          writeToSystemClipboard(target.text).then((ok) => {
+            if (ok) {
+              if (target.id) lastAutoCopiedIdRef.current = target.id;
+              pendingCopyRef.current = null;
+              setHasPendingAutoCopy(false);
+              showToast("⚡ Auto-copied pending prompt to clipboard!");
+              playAutoCopyChime();
+            }
+          });
+        } else if (prompts.length > 0) {
+          const newest = prompts[0];
+          writeToSystemClipboard(newest.text).then((ok) => {
+            if (ok) {
+              lastAutoCopiedIdRef.current = newest.id;
+              setCopyFeedbackId(newest.id);
+              setTimeout(() => {
+                setCopyFeedbackId((curr) => (curr === newest.id ? null : curr));
+              }, 2000);
+              showToast("⚡ Auto-Copy ON: Latest prompt copied to clipboard!");
+              playAutoCopyChime();
+            } else {
+              showToast("Auto-Copy enabled: Incoming prompts copy instantly");
+            }
+          });
+        } else {
+          showToast("Auto-Copy enabled: Incoming prompts copy instantly");
+        }
+      } else {
+        pendingCopyRef.current = null;
+        setHasPendingAutoCopy(false);
+        showToast("Auto-Copy disabled");
+      }
       return next;
     });
-  }, [showToast]);
+  }, [prompts, showToast, playAutoCopyChime, writeToSystemClipboard]);
 
   const generateRandomCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
-  // Helper to trigger clipboard copy
+  // Helper to trigger 1-click clipboard copy
   const copyToClipboard = useCallback(
     async (text: string, id?: string, isAuto: boolean = false) => {
-      try {
-        await navigator.clipboard.writeText(text);
+      const success = await writeToSystemClipboard(text);
+      if (success) {
         if (id) {
           setCopyFeedbackId(id);
           setTimeout(() => {
             setCopyFeedbackId((current) => (current === id ? null : current));
           }, 2000);
+          incrementCopiedCount(id);
         }
-        showToast(isAuto ? "⚡ Auto-copied new prompt to clipboard!" : "📋 Copied prompt to clipboard!");
-        
-        if (id) {
-          setPrompts((prev) =>
-            prev.map((p) => (p.id === id ? { ...p, copied_count: p.copied_count + 1 } : p))
-          );
-          if (isSupabaseConfigured() && supabase) {
-            supabase
-              .from("wispr_prompts")
-              .update({ copied_count: (prompts.find((p) => p.id === id)?.copied_count || 0) + 1 })
-              .eq("id", id)
-              .then();
-          }
-        }
-      } catch (err) {
-        console.error("Clipboard copy failed:", err);
-        showToast("⚠️ Please click to allow clipboard access");
+        showToast(isAuto ? "⚡ Auto-copied to clipboard! Ready to paste (Ctrl+V)" : "📋 Copied prompt to clipboard!");
+        playAutoCopyChime();
+      } else {
+        showToast("⚠️ Could not access clipboard. Please check browser permissions.");
       }
     },
-    [prompts, showToast]
+    [showToast, playAutoCopyChime, writeToSystemClipboard, incrementCopiedCount]
   );
 
-  // Fetch prompts for an active session
-  const fetchPrompts = useCallback(async (sessionId: string) => {
-    if (!sessionId) return;
+  // Fetch prompts for an active session (evaluated on load & 5s polling)
+  const fetchPrompts = useCallback(
+    async (sessionId: string) => {
+      if (!sessionId) return;
 
-    if (!isSupabaseConfigured() || !supabase) {
-      const stored = localStorage.getItem(`${LOCAL_STORAGE_MOCK_PROMPTS_KEY}_${sessionId}`);
-      if (stored) {
-        try {
-          const parsed: Prompt[] = JSON.parse(stored);
-          const now = Date.now();
-          const valid = parsed.filter((p) => p.is_kept || new Date(p.expires_at).getTime() > now);
-          setPrompts(valid);
-        } catch {
-          setPrompts([]);
+      if (!isSupabaseConfigured() || !supabase) {
+        const stored = localStorage.getItem(`${LOCAL_STORAGE_MOCK_PROMPTS_KEY}_${sessionId}`);
+        if (stored) {
+          try {
+            const parsed: Prompt[] = JSON.parse(stored);
+            const now = Date.now();
+            const valid = parsed.filter((p) => p.is_kept || new Date(p.expires_at).getTime() > now);
+            setPrompts(valid);
+
+            if (autoCopyRef.current && valid.length > 0) {
+              const newest = valid[0];
+              if (!isInitialFetchRef.current && newest.id !== lastAutoCopiedIdRef.current) {
+                handleAutoCopy(newest);
+              }
+            }
+          } catch {
+            setPrompts([]);
+          }
         }
-      }
-      return;
-    }
-
-    try {
-      const nowIso = new Date().toISOString();
-      const { data, error } = await supabase
-        .from("wispr_prompts")
-        .select("*")
-        .eq("session_id", sessionId)
-        .or(`is_kept.eq.true,expires_at.gt.${nowIso}`)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching prompts:", error.message);
         return;
       }
 
-      if (data) {
-        setPrompts(data as Prompt[]);
+      try {
+        const nowIso = new Date().toISOString();
+        const { data, error } = await supabase
+          .from("wispr_prompts")
+          .select("*")
+          .eq("session_id", sessionId)
+          .or(`is_kept.eq.true,expires_at.gt.${nowIso}`)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Error fetching prompts:", error.message);
+          return;
+        }
+
+        if (data) {
+          const list = data as Prompt[];
+          setPrompts(list);
+
+          if (list.length > 0) {
+            const newest = list[0];
+            if (isInitialFetchRef.current) {
+              // On initial load of room, remember newest id so historical prompts are not spammed
+              lastAutoCopiedIdRef.current = newest.id;
+              isInitialFetchRef.current = false;
+            } else if (autoCopyRef.current && newest.id !== lastAutoCopiedIdRef.current) {
+              // Fresh prompt arrived via 5s heartbeat polling!
+              handleAutoCopy(newest);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
       }
-    } catch (err) {
-      console.error("Fetch error:", err);
-    }
-  }, []);
+    },
+    [handleAutoCopy]
+  );
 
   // Listen to Supabase Auth state changes
   useEffect(() => {
@@ -164,6 +367,9 @@ export function useWisprBridge() {
   // Initialize or pair session
   const initSession = useCallback(async (forcedPairCode?: string, forceGuestCreate: boolean = false) => {
     setLoading(true);
+    isInitialFetchRef.current = true;
+    pendingCopyRef.current = null;
+    setHasPendingAutoCopy(false);
 
     let targetPairCode = forcedPairCode;
     if (!targetPairCode && typeof window !== "undefined") {
@@ -357,6 +563,10 @@ export function useWisprBridge() {
     setSession(null);
     setPairCode("");
     setPrompts([]);
+    pendingCopyRef.current = null;
+    lastAutoCopiedIdRef.current = null;
+    setHasPendingAutoCopy(false);
+    isInitialFetchRef.current = true;
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     localStorage.removeItem(LOCAL_STORAGE_PAIR_CODE_KEY);
     localStorage.removeItem(LOCAL_STORAGE_MOCK_USER_KEY);
@@ -368,6 +578,10 @@ export function useWisprBridge() {
     setSession(null);
     setPairCode("");
     setPrompts([]);
+    pendingCopyRef.current = null;
+    lastAutoCopiedIdRef.current = null;
+    setHasPendingAutoCopy(false);
+    isInitialFetchRef.current = true;
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     localStorage.removeItem(LOCAL_STORAGE_PAIR_CODE_KEY);
     showToast("Left room");
@@ -375,6 +589,10 @@ export function useWisprBridge() {
 
   // Create a brand new session code
   const createNewPairCode = async () => {
+    pendingCopyRef.current = null;
+    lastAutoCopiedIdRef.current = null;
+    setHasPendingAutoCopy(false);
+    isInitialFetchRef.current = true;
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     localStorage.removeItem(LOCAL_STORAGE_PAIR_CODE_KEY);
     await initSession(undefined, true);
@@ -511,9 +729,8 @@ export function useWisprBridge() {
             return [newPrompt, ...prev];
           });
 
-          if (autoCopyRef.current && lastPromptIdRef.current !== newPrompt.id) {
-            lastPromptIdRef.current = newPrompt.id;
-            copyToClipboard(newPrompt.text, newPrompt.id, true);
+          if (autoCopyRef.current && lastAutoCopiedIdRef.current !== newPrompt.id) {
+            handleAutoCopy(newPrompt);
           }
         }
       )
@@ -560,7 +777,7 @@ export function useWisprBridge() {
         supabase.removeChannel(channel);
       }
     };
-  }, [session?.id, copyToClipboard, selectedPrompt?.id]);
+  }, [session?.id, handleAutoCopy, selectedPrompt?.id]);
 
   // Heartbeat Polling: Refresh every 5 seconds
   useEffect(() => {
@@ -600,6 +817,7 @@ export function useWisprBridge() {
     loading,
     isConnected,
     autoCopyEnabled,
+    hasPendingAutoCopy,
     toggleAutoCopy,
     copyFeedbackId,
     toastMessage,

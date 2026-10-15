@@ -26,6 +26,7 @@ export default function WisprBridgeHome() {
     loading,
     isConnected,
     autoCopyEnabled,
+    hasPendingAutoCopy,
     toggleAutoCopy,
     copyFeedbackId,
     toastMessage,
@@ -93,6 +94,7 @@ export default function WisprBridgeHome() {
             isConnected={isConnected}
             pairCode={pairCode}
             autoCopyEnabled={autoCopyEnabled}
+            hasPendingAutoCopy={hasPendingAutoCopy}
             onToggleAutoCopy={toggleAutoCopy}
             onOpenPairModal={() => setIsPairModalOpen(true)}
             onOpenSettingsModal={() => setIsSettingsModalOpen(true)}

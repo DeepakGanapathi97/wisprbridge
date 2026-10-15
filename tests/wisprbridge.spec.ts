@@ -181,4 +181,65 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
     await contextA.close();
     await contextB.close();
   });
+
+  test("5. Robust Auto-Copy Engine: Automatically writes incoming prompts to laptop clipboard", async ({ browser }) => {
+    const mobileContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      permissions: ["clipboard-read", "clipboard-write"],
+    });
+    const mobilePage = await mobileContext.newPage();
+    await mobilePage.goto(PROD_URL);
+    await mobilePage.evaluate(() => localStorage.clear());
+    await mobilePage.reload();
+    await mobilePage.waitForLoadState("domcontentloaded");
+
+    // Mobile creates room
+    await mobilePage.getByRole("button", { name: /Create Room/i }).click();
+    const roomBtn = mobilePage.locator("header div").filter({ hasText: /Room:/i }).first();
+    await expect(roomBtn).toBeVisible({ timeout: 10000 });
+    const pairCode = (await roomBtn.innerText()).replace(/\D/g, "").slice(0, 6);
+
+    // Laptop joins same room
+    const laptopContext = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      permissions: ["clipboard-read", "clipboard-write"],
+    });
+    const laptopPage = await laptopContext.newPage();
+    await laptopPage.goto(`${PROD_URL}?code=${pairCode}`);
+    await laptopPage.waitForLoadState("domcontentloaded");
+
+    // Turn ON Auto-Copy on Laptop
+    const autoCopyBtn = laptopPage.getByRole("button", { name: /Auto-Copy/i });
+    await expect(autoCopyBtn).toBeVisible({ timeout: 10000 });
+    await autoCopyBtn.click();
+    await expect(autoCopyBtn).toContainText("ON");
+
+    // Mobile submits prompt
+    const autoCopyPrompt = `AutoCopy Test ${Date.now()}: whisper to clipboard`;
+    const mobileInput = mobilePage.getByPlaceholder(/Create unit tests|e\.g\./i);
+    await mobileInput.fill(autoCopyPrompt);
+    await mobilePage.getByTitle(/Add and sync prompt/i).click();
+
+    // Laptop tab brings to front and interacts to simulate active user session
+    await laptopPage.bringToFront();
+    await laptopPage.mouse.click(200, 200);
+
+    // Verify prompt appears on laptop
+    const laptopCard = laptopPage.locator(".group").filter({ hasText: autoCopyPrompt });
+    await expect(laptopCard).toBeVisible({ timeout: 15000 });
+
+    // Assert clipboard text contains the auto-copied prompt
+    await expect.poll(async () => {
+      return await laptopPage.evaluate(async () => {
+        try {
+          return await navigator.clipboard.readText();
+        } catch {
+          return "";
+        }
+      });
+    }, { timeout: 12000 }).toContain(autoCopyPrompt);
+
+    await mobileContext.close();
+    await laptopContext.close();
+  });
 });
