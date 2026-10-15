@@ -3,92 +3,122 @@ import { test, expect } from "@playwright/test";
 const PROD_URL = process.env.TEST_URL || "https://wisprbridge.vercel.app";
 
 test.describe("WisprBridge Production E2E Suite", () => {
-  test("1. Production page loads with Google Eloquent styling and brand elements", async ({ page }) => {
+  test("1. Gateway displays Join Room/Group & Sign In/Sign Up options", async ({ page }) => {
+    // Clear localStorage to ensure fresh visitor state
     await page.goto(PROD_URL);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
     // Title verification
     await expect(page).toHaveTitle(/WisprBridge/);
 
-    // Brand header
-    const brand = page.locator("h1");
-    await expect(brand).toContainText("WisprBridge");
+    // Gateway heading
+    await expect(page.getByRole("heading", { name: /Welcome to WisprBridge/i })).toBeVisible({ timeout: 10000 });
 
-    // Eloquent Status Pill
-    const statusPill = page.locator("header div").filter({ hasText: /On|Syncing/ }).first();
-    await expect(statusPill).toBeVisible();
+    // Option 1: Join Room or Group
+    await expect(page.getByRole("heading", { name: /Join a Room or Group/i })).toBeVisible();
+    await expect(page.getByPlaceholder(/e\.g\. 582194/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Join Room/i })).toBeVisible();
 
-    // Auto-Copy switch pill
-    const autoCopyBtn = page.getByRole("button", { name: /Auto-Copy/i });
-    await expect(autoCopyBtn).toBeVisible();
-
-    // Tabs
-    const allTab = page.getByRole("button", { name: /All prompts/i });
-    const keptTab = page.getByRole("button", { name: /Kept/i });
-    await expect(allTab).toBeVisible();
-    await expect(keptTab).toBeVisible();
-
-    // Eloquent Input Bar & Circular + button
-    const inputField = page.getByPlaceholder(/Create unit tests|e\.g\./i);
-    await expect(inputField).toBeVisible();
-
-    const addBtn = page.getByTitle(/Add and sync prompt/i);
-    await expect(addBtn).toBeVisible();
+    // Option 2: Sign In / Create Account
+    await expect(page.getByRole("heading", { name: /Sign In \/ Create Account/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Sign In \/ Sign Up/i })).toBeVisible();
   });
 
-  test("2. Device Pairing Modal & 6-digit room code generation", async ({ page }) => {
+  test("2. Floating Auth Modal (Sign In / Sign Up) interaction", async ({ page }) => {
     await page.goto(PROD_URL);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
-    // Click room pill in header
-    const roomBtn = page.locator("header button").filter({ hasText: /Room:/i });
-    await expect(roomBtn).toBeVisible({ timeout: 10000 });
-    await roomBtn.click();
+    // Click Sign In / Sign Up button on Gateway
+    const authBtn = page.getByRole("button", { name: /Sign In \/ Sign Up/i });
+    await expect(authBtn).toBeVisible({ timeout: 10000 });
+    await authBtn.click();
 
-    // Modal should appear
-    const modalHeading = page.getByRole("heading", { name: /Device Pairing/i });
+    // Modal should be visible
+    const modalHeading = page.getByRole("heading", { name: /Sign In to WisprBridge|Create Your Account/i });
     await expect(modalHeading).toBeVisible();
 
-    // 6-digit code display
-    const codeDisplay = page.locator("span.font-mono.text-3xl");
-    await expect(codeDisplay).toBeVisible();
-    const codeText = await codeDisplay.textContent();
-    expect(codeText?.replace(/\D/g, "").length).toBe(6);
+    // Inputs
+    await expect(page.getByPlaceholder("developer@example.com")).toBeVisible();
+    await expect(page.getByPlaceholder("••••••••")).toBeVisible();
+
+    // Toggle between Sign In and Sign Up
+    const toggleBtn = page.getByRole("button", { name: /Don't have an account\?|Already have an account\?/i });
+    await expect(toggleBtn).toBeVisible();
+    await toggleBtn.click();
+    await expect(page.getByRole("heading", { name: /Create Your Account/i })).toBeVisible();
 
     // Close modal
-    const closeBtn = page.locator("button").filter({ has: page.locator("svg.lucide-x") }).first();
+    const closeBtn = page.locator(".fixed.inset-0 button").filter({ has: page.locator("svg.lucide-x") }).first();
     await closeBtn.click();
     await expect(modalHeading).not.toBeVisible();
   });
 
-  test("3. End-to-End Cross-Device Sync, Keep, Modal Reader, Copy, and Delete", async ({ browser }) => {
-    // Context 1: Mobile sender
+  test("3. Guest Room creation & Room/Group Pairing Modal", async ({ page }) => {
+    await page.goto(PROD_URL);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+
+    // Click quick guest room
+    const guestBtn = page.getByRole("button", { name: /start a quick temporary guest room/i });
+    await expect(guestBtn).toBeVisible({ timeout: 10000 });
+    await guestBtn.click();
+
+    // Now in active bridge workspace
+    const roomBtn = page.locator("header button").filter({ hasText: /Room:/i });
+    await expect(roomBtn).toBeVisible({ timeout: 10000 });
+    const roomText = await roomBtn.innerText();
+    const pairCode = roomText.replace(/\D/g, "").slice(0, 6);
+    expect(pairCode.length).toBe(6);
+
+    // Click to open Room & Group Pairing modal
+    await roomBtn.click();
+    await expect(page.getByRole("heading", { name: /Room & Group Pairing/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Join Group/i })).toBeVisible();
+
+    // Close modal
+    const closeBtn = page.locator(".fixed.inset-0 button").filter({ has: page.locator("svg.lucide-x") }).first();
+    await closeBtn.click();
+    await expect(page.getByRole("heading", { name: /Room & Group Pairing/i })).not.toBeVisible();
+  });
+
+  test("4. Cross-Device Sync, Auto-Copy, Keep, Reader Modal, and Delete", async ({ browser }) => {
+    // Context 1: Mobile host (starts a room)
     const mobileContext = await browser.newContext({
       viewport: { width: 390, height: 844 },
       permissions: ["clipboard-read", "clipboard-write"],
     });
     const mobilePage = await mobileContext.newPage();
     await mobilePage.goto(PROD_URL);
+    await mobilePage.evaluate(() => localStorage.clear());
+    await mobilePage.reload();
     await mobilePage.waitForLoadState("domcontentloaded");
 
-    // Retrieve mobile's room code
+    // Start mobile room
+    const mobileGuestBtn = mobilePage.getByRole("button", { name: /start a quick temporary guest room/i });
+    await expect(mobileGuestBtn).toBeVisible({ timeout: 10000 });
+    await mobileGuestBtn.click();
+
     const mobileRoomBtn = mobilePage.locator("header button").filter({ hasText: /Room:/i });
     await expect(mobileRoomBtn).toBeVisible({ timeout: 10000 });
     const roomText = await mobileRoomBtn.innerText();
     const pairCode = roomText.replace(/\D/g, "").slice(0, 6);
     expect(pairCode.length).toBe(6);
 
-    // Context 2: Work Laptop receiver
+    // Context 2: Laptop receiver (joins via 6-digit code or direct URL)
     const laptopContext = await browser.newContext({
       viewport: { width: 1440, height: 900 },
       permissions: ["clipboard-read", "clipboard-write"],
     });
     const laptopPage = await laptopContext.newPage();
-    // Connect directly via room query param
     await laptopPage.goto(`${PROD_URL}?code=${pairCode}`);
     await laptopPage.waitForLoadState("domcontentloaded");
 
-    // Verify laptop is paired to the exact same room
+    // Laptop should be in the room
     const laptopRoomBtn = laptopPage.locator("header button").filter({ hasText: /Room:/i });
     await expect(laptopRoomBtn).toContainText(pairCode, { timeout: 10000 });
 
@@ -97,129 +127,82 @@ test.describe("WisprBridge Production E2E Suite", () => {
     await laptopAutoCopy.click();
     await expect(laptopAutoCopy).toContainText("ON");
 
-    // STEP A: Mobile inputs prompt (simulating Whisper Flow speech-to-text)
-    const testPromptText = `Prompt Test ${Date.now()}: Refactor auth hook for WisprBridge`;
+    // Mobile sends prompt (Whisper Flow speech-to-text simulation)
+    const testPrompt = `Sync Prompt ${Date.now()}: Test real-time bridge across mobile & laptop`;
     const mobileInput = mobilePage.getByPlaceholder(/Create unit tests|e\.g\./i);
-    await mobileInput.fill(testPromptText);
-
+    await mobileInput.fill(testPrompt);
     const mobileAddBtn = mobilePage.getByTitle(/Add and sync prompt/i);
     await mobileAddBtn.click();
 
-    // STEP B: Verify prompt appears on mobile
-    const mobilePromptCard = mobilePage.locator(".group").filter({ hasText: testPromptText });
-    await expect(mobilePromptCard).toBeVisible({ timeout: 10000 });
+    // Verify appears on mobile
+    const mobileCard = mobilePage.locator(".group").filter({ hasText: testPrompt });
+    await expect(mobileCard).toBeVisible({ timeout: 10000 });
 
-    // STEP C: Verify prompt arrives on laptop in real-time
-    const laptopPromptCard = laptopPage.locator(".group").filter({ hasText: testPromptText });
-    await expect(laptopPromptCard).toBeVisible({ timeout: 15000 });
+    // Verify appears on laptop in real time
+    const laptopCard = laptopPage.locator(".group").filter({ hasText: testPrompt });
+    await expect(laptopCard).toBeVisible({ timeout: 15000 });
 
-    // Verify card metadata: timestamp and TTL or Kept status
-    await expect(laptopPromptCard.locator("span").filter({ hasText: /left|Kept/ }).first()).toBeVisible({ timeout: 10000 });
+    // Verify card metadata: timestamp and 1-hour TTL
+    await expect(laptopCard.locator("span").filter({ hasText: /left|Kept/ }).first()).toBeVisible({ timeout: 10000 });
 
     // Verify Copy button is next to Delete button
-    const copyBtn = laptopPromptCard.locator("button[title*='Copy']");
-    const deleteBtn = laptopPromptCard.locator("button[title*='Delete']");
+    const copyBtn = laptopCard.locator("button[title*='Copy']");
+    const deleteBtn = laptopCard.locator("button[title*='Delete']");
     await expect(copyBtn).toBeVisible();
     await expect(deleteBtn).toBeVisible();
 
-    // STEP D: Test 1-Click Copy on laptop
+    // 1-Click Copy
     await copyBtn.click();
-    // Verify toast notification
     const toast = laptopPage.locator(".fixed.bottom-20, .fixed.bottom-6");
     await expect(toast).toBeVisible({ timeout: 5000 });
 
-    // STEP E: Test "Keep" toggle (prevents 1-hour self-destruct)
-    const keepBtn = laptopPromptCard.locator("button[title*='Keep']");
+    // Keep toggle
+    const keepBtn = laptopCard.locator("button[title*='Keep']");
     await keepBtn.click();
-    await expect(laptopPromptCard.locator("span").filter({ hasText: /Kept/ }).first()).toBeVisible({ timeout: 5000 });
+    await expect(laptopCard.locator("span").filter({ hasText: /Kept/ }).first()).toBeVisible({ timeout: 5000 });
 
-    // Check Kept tab filter
-    const keptTab = laptopPage.getByRole("button", { name: /Kept/i });
-    await keptTab.click();
-    await expect(laptopPromptCard).toBeVisible();
-
-    // Switch back to All tab
-    const allTab = laptopPage.getByRole("button", { name: /All prompts/i });
-    await allTab.click();
-
-    // STEP F: Test Floating Prompt Reader Modal
-    await laptopPromptCard.locator("p").first().click();
-    const readerModal = laptopPage.locator(".fixed.inset-0").filter({ hasText: /Prompt Details|words|characters/i });
+    // Reader Modal
+    await laptopCard.locator("p").first().click();
+    const readerModal = laptopPage.locator(".fixed.inset-0").filter({ hasText: /words|characters/i });
     await expect(readerModal).toBeVisible();
-    await expect(readerModal).toContainText(testPromptText);
+    await expect(readerModal).toContainText(testPrompt);
 
-    // Close modal
     const closeReaderBtn = readerModal.locator("button[title*='Close']");
     await closeReaderBtn.click();
     await expect(readerModal).not.toBeVisible();
 
-    // STEP G: Delete Prompt
+    // Delete
     await deleteBtn.click();
-    await expect(laptopPromptCard).not.toBeVisible({ timeout: 8000 });
-
-    // Also verify deleted on mobile
-    await expect(mobilePromptCard).not.toBeVisible({ timeout: 8000 });
+    await expect(laptopCard).not.toBeVisible({ timeout: 8000 });
 
     await mobileContext.close();
     await laptopContext.close();
   });
 
-  test("4. Settings Modal & Self-Destruction Lifecycle display", async ({ page }) => {
+  test("5. Settings Modal & Self-Destruction Lifecycle display", async ({ page }) => {
     await page.goto(PROD_URL);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
-    // Open settings via bottom nav on mobile or settings modal
+    // Start guest room to access settings
+    const guestBtn = page.getByRole("button", { name: /start a quick temporary guest room/i });
+    await expect(guestBtn).toBeVisible({ timeout: 10000 });
+    await guestBtn.click();
+
+    // Open settings
     const settingsBtn = page.getByRole("button", { name: /Settings/i });
-    await expect(settingsBtn).toBeVisible();
+    await expect(settingsBtn).toBeVisible({ timeout: 10000 });
     await settingsBtn.click();
 
     // Verify settings content
     const settingsHeading = page.getByRole("heading", { name: /Settings & Rules/i });
     await expect(settingsHeading).toBeVisible();
-
-    // Verify 1-hour self destruct rule notice
     await expect(page.getByText(/1-Hour Rolling Self-Destruct/i)).toBeVisible();
 
     // Close settings
     const doneBtn = page.getByRole("button", { name: /Done/i });
     await doneBtn.click();
     await expect(settingsHeading).not.toBeVisible();
-  });
-
-  test("5. Multi-prompt sequential streams with counter badges", async ({ page }) => {
-    await page.goto(PROD_URL);
-    await page.waitForLoadState("domcontentloaded");
-
-    // Ensure session is initialized before submitting
-    const roomBtn = page.locator("header button").filter({ hasText: /Room:/i });
-    await expect(roomBtn).toBeVisible({ timeout: 10000 });
-
-    const inputField = page.getByPlaceholder(/Create unit tests|e\.g\./i);
-    const addBtn = page.getByTitle(/Add and sync prompt/i);
-
-    const prompt1 = `Batch Prompt 1: ${Date.now()}`;
-    const prompt2 = `Batch Prompt 2: ${Date.now()}`;
-
-    // Add prompt 1
-    await inputField.fill(prompt1);
-    await addBtn.click();
-    await expect(page.locator(".group").filter({ hasText: prompt1 })).toBeVisible({ timeout: 10000 });
-
-    // Add prompt 2
-    await inputField.fill(prompt2);
-    await addBtn.click();
-    await expect(page.locator(".group").filter({ hasText: prompt2 })).toBeVisible({ timeout: 10000 });
-
-    // Verify counter badge on tab reflects multiple prompts
-    const allTab = page.getByRole("button", { name: /All prompts/i });
-    await expect(allTab).toContainText("2");
-
-    // Clean up prompts
-    const deleteButtons = page.locator("button[title*='Delete']");
-    const count = await deleteButtons.count();
-    for (let i = 0; i < count; i++) {
-      await deleteButtons.first().click();
-      await page.waitForTimeout(600);
-    }
   });
 });

@@ -4,6 +4,8 @@ export interface Session {
   id: string;
   pair_code: string;
   device_label?: string;
+  user_id?: string;
+  group_name?: string;
   created_at: string;
   expires_at: string;
   is_active: boolean;

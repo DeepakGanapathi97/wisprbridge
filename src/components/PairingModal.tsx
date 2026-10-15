@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Smartphone, Laptop, ArrowRight, RefreshCw, Copy, Check, ShieldCheck } from "lucide-react";
+import { X, Users, ArrowRight, RefreshCw, Copy, Check, ShieldCheck, Laptop } from "lucide-react";
 
 interface PairingModalProps {
   isOpen: boolean;
@@ -55,11 +55,11 @@ export function PairingModal({
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
-              <Laptop className="w-4 h-4" />
+              <Users className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Device Pairing</h2>
-              <p className="text-xs text-slate-500">Connect mobile & work laptop</p>
+              <h2 className="text-base font-semibold text-slate-900">Room & Group Pairing</h2>
+              <p className="text-xs text-slate-500">Connect mobile, laptop, or team group</p>
             </div>
           </div>
           <button
@@ -70,10 +70,10 @@ export function PairingModal({
           </button>
         </div>
 
-        {/* Section 1: This Device's Active Code */}
+        {/* Section 1: Current Active Code */}
         <div className="my-5 p-4 rounded-2xl bg-gradient-to-b from-slate-50 to-blue-50/30 border border-slate-200/80 text-center">
           <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">
-            Current Room Code
+            Active Room Code
           </span>
           <div className="my-2 flex items-center justify-center gap-2">
             <span className="font-mono text-3xl font-bold tracking-widest text-slate-900">
@@ -88,7 +88,7 @@ export function PairingModal({
             </button>
           </div>
           <p className="text-xs text-slate-500">
-            Enter this code on your other device to sync in real time.
+            Share this code with your other device or team to sync prompts live.
           </p>
 
           <button
@@ -100,10 +100,10 @@ export function PairingModal({
           </button>
         </div>
 
-        {/* Section 2: Connect with another code */}
+        {/* Section 2: Join another Room or Group */}
         <form onSubmit={handleJoin} className="mt-4 pt-4 border-t border-slate-100">
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Join Another Device Room
+            Join Another Room or Group
           </label>
           <div className="flex gap-2">
             <input
@@ -117,9 +117,9 @@ export function PairingModal({
             <button
               type="submit"
               disabled={inputCode.length !== 6 || isSubmitting}
-              className="px-4 py-2.5 rounded-2xl bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-40 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              className="px-4 py-2.5 rounded-2xl bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-40 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
             >
-              <span>Pair</span>
+              <span>Join Group</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -128,7 +128,7 @@ export function PairingModal({
         {/* Security badge */}
         <div className="mt-4 flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 text-[11px] text-slate-500 border border-slate-100">
           <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>No passwords or account logins required on your corporate machine.</span>
+          <span>Zero passwords or login required when joining rooms via code.</span>
         </div>
       </div>
     </div>

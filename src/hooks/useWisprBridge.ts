@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, isSupabaseConfigured, Session, Prompt } from "@/lib/supabase";
+import { User } from "@supabase/supabase-js";
 
 const LOCAL_STORAGE_SESSION_KEY = "wisprbridge_session_id";
 const LOCAL_STORAGE_PAIR_CODE_KEY = "wisprbridge_pair_code";
 const LOCAL_STORAGE_AUTO_COPY_KEY = "wisprbridge_auto_copy";
 const LOCAL_STORAGE_MOCK_PROMPTS_KEY = "wisprbridge_mock_prompts";
+const LOCAL_STORAGE_MOCK_USER_KEY = "wisprbridge_mock_user";
 
 export function useWisprBridge() {
+  const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [pairCode, setPairCode] = useState<string>("");
   const [prompts, setPrompts] = useState<Prompt[]>([]);
@@ -19,6 +22,7 @@ export function useWisprBridge() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "kept">("all");
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   const lastPromptIdRef = useRef<string | null>(null);
   const autoCopyRef = useRef<boolean>(false);
@@ -48,7 +52,6 @@ export function useWisprBridge() {
     });
   }, [showToast]);
 
-  // Generate 6-digit random code
   const generateRandomCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
@@ -66,14 +69,13 @@ export function useWisprBridge() {
         }
         showToast(isAuto ? "⚡ Auto-copied new prompt to clipboard!" : "📋 Copied prompt to clipboard!");
         
-        // Optimistically increment copied_count
         if (id) {
           setPrompts((prev) =>
             prev.map((p) => (p.id === id ? { ...p, copied_count: p.copied_count + 1 } : p))
           );
           if (isSupabaseConfigured() && supabase) {
             supabase
-              .from("prompts")
+              .from("wispr_prompts")
               .update({ copied_count: (prompts.find((p) => p.id === id)?.copied_count || 0) + 1 })
               .eq("id", id)
               .then();
@@ -87,18 +89,16 @@ export function useWisprBridge() {
     [prompts, showToast]
   );
 
-  // Fetch prompts for a session
+  // Fetch prompts for an active session
   const fetchPrompts = useCallback(async (sessionId: string) => {
     if (!sessionId) return;
 
     if (!isSupabaseConfigured() || !supabase) {
-      // Offline / Demo mode with localStorage
       const stored = localStorage.getItem(`${LOCAL_STORAGE_MOCK_PROMPTS_KEY}_${sessionId}`);
       if (stored) {
         try {
           const parsed: Prompt[] = JSON.parse(stored);
-          const now = new Date().getTime();
-          // Filter out expired unkept prompts
+          const now = Date.now();
           const valid = parsed.filter((p) => p.is_kept || new Date(p.expires_at).getTime() > now);
           setPrompts(valid);
         } catch {
@@ -130,8 +130,39 @@ export function useWisprBridge() {
     }
   }, []);
 
-  // Create or load session
-  const initSession = useCallback(async (forcedPairCode?: string) => {
+  // Listen to Supabase Auth state changes
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) {
+      const storedUser = localStorage.getItem(LOCAL_STORAGE_MOCK_USER_KEY);
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          setUser(null);
+        }
+      }
+      return;
+    }
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        setUser(data.user);
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, authSession) => {
+        setUser(authSession?.user ?? null);
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Initialize or pair session
+  const initSession = useCallback(async (forcedPairCode?: string, forceGuestCreate: boolean = false) => {
     setLoading(true);
 
     let targetPairCode = forcedPairCode;
@@ -143,36 +174,42 @@ export function useWisprBridge() {
       }
     }
 
+    const savedSessionId = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_SESSION_KEY) : null;
+    const savedPairCode = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_PAIR_CODE_KEY) : null;
+
     if (!isSupabaseConfigured() || !supabase) {
       // Local simulation mode
-      let activeCode = targetPairCode || localStorage.getItem(LOCAL_STORAGE_PAIR_CODE_KEY);
-      if (!activeCode) {
+      let activeCode = targetPairCode || savedPairCode;
+      if (!activeCode && forceGuestCreate) {
         activeCode = generateRandomCode();
       }
-      const mockSession: Session = {
-        id: `mock-sess-${activeCode}`,
-        pair_code: activeCode,
-        device_label: "Wispr Device",
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-        is_active: true,
-      };
 
-      localStorage.setItem(LOCAL_STORAGE_PAIR_CODE_KEY, activeCode);
-      localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, mockSession.id);
-      setSession(mockSession);
-      setPairCode(activeCode);
-      setIsConnected(true);
-      fetchPrompts(mockSession.id);
+      if (activeCode) {
+        const mockSession: Session = {
+          id: `mock-sess-${activeCode}`,
+          pair_code: activeCode,
+          device_label: "Wispr Device",
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+          is_active: true,
+        };
+
+        localStorage.setItem(LOCAL_STORAGE_PAIR_CODE_KEY, activeCode);
+        localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, mockSession.id);
+        setSession(mockSession);
+        setPairCode(activeCode);
+        setIsConnected(true);
+        fetchPrompts(mockSession.id);
+      }
       setLoading(false);
-      return mockSession;
+      return;
     }
 
     try {
       let activeSession: Session | null = null;
 
       if (targetPairCode) {
-        // Pairing with specific code
+        // Joining specific room/group code
         const { data, error } = await supabase
           .from("wispr_sessions")
           .select("*")
@@ -181,41 +218,35 @@ export function useWisprBridge() {
           .single();
 
         if (error || !data) {
-          throw new Error("Invalid or expired 6-digit pair code.");
+          throw new Error("Invalid or expired 6-digit room code.");
         }
         activeSession = data as Session;
-      } else {
-        const savedSessionId = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
-        if (savedSessionId) {
-          const { data } = await supabase
-            .from("wispr_sessions")
-            .select("*")
-            .eq("id", savedSessionId)
-            .eq("is_active", true)
-            .single();
+      } else if (savedSessionId) {
+        // Reconnecting to previously joined room
+        const { data } = await supabase
+          .from("wispr_sessions")
+          .select("*")
+          .eq("id", savedSessionId)
+          .eq("is_active", true)
+          .single();
 
-          if (data) {
-            activeSession = data as Session;
-          }
-        }
-
-        // If no active session found, create a new one
-        if (!activeSession) {
-          const newCode = generateRandomCode();
-          const { data, error } = await supabase
-            .from("wispr_sessions")
-            .insert({
-              pair_code: newCode,
-              device_label: "Wispr Mobile Session",
-            })
-            .select()
-            .single();
-
-          if (error || !data) {
-            throw error || new Error("Failed to create session");
-          }
+        if (data) {
           activeSession = data as Session;
         }
+      } else if (forceGuestCreate) {
+        // Explicitly requested guest room
+        const newCode = generateRandomCode();
+        const { data, error } = await supabase
+          .from("wispr_sessions")
+          .insert({
+            pair_code: newCode,
+            device_label: "Wispr Guest Session",
+          })
+          .select()
+          .single();
+
+        if (error || !data) throw error;
+        activeSession = data as Session;
       }
 
       if (activeSession) {
@@ -225,10 +256,15 @@ export function useWisprBridge() {
         setPairCode(activeSession.pair_code);
         setIsConnected(true);
         await fetchPrompts(activeSession.id);
+      } else {
+        // Not in any room yet
+        setSession(null);
+        setPairCode("");
+        setPrompts([]);
       }
     } catch (err: unknown) {
       console.error("Session init error:", err);
-      const message = err instanceof Error ? err.message : "Failed to connect session";
+      const message = err instanceof Error ? err.message : "Failed to connect room";
       showToast(message);
     } finally {
       setLoading(false);
@@ -239,7 +275,7 @@ export function useWisprBridge() {
   const pairWithCode = async (code: string) => {
     const cleanCode = code.trim().replace(/\D/g, "");
     if (cleanCode.length !== 6) {
-      showToast("Pair code must be 6 digits");
+      showToast("Room code must be 6 digits");
       return false;
     }
     try {
@@ -253,12 +289,96 @@ export function useWisprBridge() {
     }
   };
 
+  // Sign In or Sign Up method
+  const signInOrSignUp = async (email: string, pass: string, isSignUpMode: boolean) => {
+    if (!isSupabaseConfigured() || !supabase) {
+      const mockUser = { id: `user-${Date.now()}`, email } as User;
+      setUser(mockUser);
+      localStorage.setItem(LOCAL_STORAGE_MOCK_USER_KEY, JSON.stringify(mockUser));
+      showToast(`✨ Welcome, ${email}!`);
+      await initSession(undefined, true);
+      return { success: true };
+    }
+
+    try {
+      if (isSignUpMode) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: pass,
+        });
+        if (error) throw error;
+        if (data.user) {
+          setUser(data.user);
+          showToast("🎉 Account created! Signed in successfully.");
+          await initSession(undefined, true);
+          return { success: true };
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password: pass,
+        });
+        if (error) {
+          // If credentials don't exist, automatically sign up as requested
+          if (error.message.toLowerCase().includes("invalid login credentials")) {
+            const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+              email,
+              password: pass,
+            });
+            if (!signUpErr && signUpData.user) {
+              setUser(signUpData.user);
+              showToast("🎉 Account automatically created & signed in!");
+              await initSession(undefined, true);
+              return { success: true };
+            }
+          }
+          throw error;
+        }
+        if (data.user) {
+          setUser(data.user);
+          showToast(`👋 Welcome back, ${email}!`);
+          await initSession(undefined, true);
+          return { success: true };
+        }
+      }
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Authentication error";
+      return { success: false, error: msg };
+    }
+  };
+
+  // Sign Out
+  const signOut = async () => {
+    if (isSupabaseConfigured() && supabase) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setSession(null);
+    setPairCode("");
+    setPrompts([]);
+    localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_PAIR_CODE_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_MOCK_USER_KEY);
+    showToast("Signed out successfully");
+  };
+
+  // Leave room (returns to gateway)
+  const leaveRoom = () => {
+    setSession(null);
+    setPairCode("");
+    setPrompts([]);
+    localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_PAIR_CODE_KEY);
+    showToast("Left room");
+  };
+
   // Create a brand new session code
   const createNewPairCode = async () => {
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     localStorage.removeItem(LOCAL_STORAGE_PAIR_CODE_KEY);
-    await initSession();
-    showToast("🔑 Generated new 6-digit pair code");
+    await initSession(undefined, true);
+    showToast("🔑 Generated new 6-digit room code");
   };
 
   // Add a new prompt
@@ -273,11 +393,10 @@ export function useWisprBridge() {
       is_kept: false,
       copied_count: 0,
       created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour TTL
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     };
 
     if (!isSupabaseConfigured() || !supabase) {
-      // Local fallback
       const updated = [newPromptData, ...prompts];
       setPrompts(updated);
       localStorage.setItem(
@@ -392,7 +511,6 @@ export function useWisprBridge() {
             return [newPrompt, ...prev];
           });
 
-          // Check for auto-copy
           if (autoCopyRef.current && lastPromptIdRef.current !== newPrompt.id) {
             lastPromptIdRef.current = newPrompt.id;
             copyToClipboard(newPrompt.text, newPrompt.id, true);
@@ -444,7 +562,7 @@ export function useWisprBridge() {
     };
   }, [session?.id, copyToClipboard, selectedPrompt?.id]);
 
-  // Heartbeat Polling: Refresh every 5 seconds as specified by user
+  // Heartbeat Polling: Refresh every 5 seconds
   useEffect(() => {
     if (!session?.id) return;
 
@@ -455,7 +573,7 @@ export function useWisprBridge() {
     return () => clearInterval(interval);
   }, [session?.id, fetchPrompts]);
 
-  // Periodic TTL check (every 10 seconds to auto-remove expired prompts locally)
+  // Periodic TTL check (every 10 seconds)
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -473,6 +591,7 @@ export function useWisprBridge() {
   });
 
   return {
+    user,
     session,
     pairCode,
     prompts: filteredPrompts,
@@ -488,12 +607,19 @@ export function useWisprBridge() {
     setSelectedPrompt,
     activeTab,
     setActiveTab,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
     addPrompt,
     toggleKeep,
     deletePrompt,
     copyToClipboard,
     pairWithCode,
     createNewPairCode,
+    signInOrSignUp,
+    signOut,
+    leaveRoom,
+    startGuestRoom: () => initSession(undefined, true),
+    isInRoom: Boolean(session && pairCode),
     isSupabaseConfigured: isSupabaseConfigured(),
   };
 }

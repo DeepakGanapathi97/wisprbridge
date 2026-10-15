@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Cloud, CloudOff, Sparkles, Laptop, Link2, Copy, Check, Settings } from "lucide-react";
+import { Cloud, CloudOff, Sparkles, Laptop, Link2, Copy, Check, Settings, LogIn, LogOut, LogOutIcon } from "lucide-react";
 
 interface HeaderProps {
   isConnected: boolean;
@@ -10,6 +10,10 @@ interface HeaderProps {
   onToggleAutoCopy: () => void;
   onOpenPairModal: () => void;
   onOpenSettingsModal: () => void;
+  onOpenAuthModal: () => void;
+  userEmail?: string | null;
+  onSignOut: () => void;
+  onLeaveRoom: () => void;
   isSupabaseConfigured: boolean;
 }
 
@@ -20,6 +24,10 @@ export function Header({
   onToggleAutoCopy,
   onOpenPairModal,
   onOpenSettingsModal,
+  onOpenAuthModal,
+  userEmail,
+  onSignOut,
+  onLeaveRoom,
   isSupabaseConfigured,
 }: HeaderProps) {
   const [copiedCode, setCopiedCode] = React.useState(false);
@@ -47,31 +55,66 @@ export function Header({
         </div>
 
         {/* Right Status Indicators */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          {/* User Account / Sign In Pill */}
+          {userEmail ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs">
+              <span className="truncate max-w-[120px] sm:max-w-[160px] font-medium" title={userEmail}>
+                {userEmail}
+              </span>
+              <button
+                onClick={onSignOut}
+                title="Sign out of account"
+                className="p-0.5 rounded hover:bg-emerald-200 text-emerald-700 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuthModal}
+              title="Sign in or create account to save personal rooms"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+            >
+              <LogIn className="w-3.5 h-3.5 text-blue-600" />
+              <span>Sign In / Up</span>
+            </button>
+          )}
+
           {/* Pair Code Quick Pill */}
           {pairCode && (
-            <button
-              onClick={onOpenPairModal}
-              title="Click to view or change device pair code"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 transition-all cursor-pointer shadow-2xs"
-            >
-              <Link2 className="w-3.5 h-3.5 text-slate-500" />
-              <span>Room:</span>
-              <span className="font-mono font-semibold tracking-wider text-slate-900">
-                {pairCode}
-              </span>
-              <span
-                onClick={copyCode}
-                className="ml-1 p-0.5 rounded hover:bg-slate-300 transition-colors"
-                title="Copy Room Code"
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onOpenPairModal}
+                title="Click to view or join another room/group code"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 transition-all cursor-pointer shadow-2xs"
               >
-                {copiedCode ? (
-                  <Check className="w-3 h-3 text-emerald-600" />
-                ) : (
-                  <Copy className="w-3 h-3 text-slate-400 hover:text-slate-700" />
-                )}
-              </span>
-            </button>
+                <Link2 className="w-3.5 h-3.5 text-slate-500" />
+                <span>Room:</span>
+                <span className="font-mono font-semibold tracking-wider text-slate-900">
+                  {pairCode}
+                </span>
+                <span
+                  onClick={copyCode}
+                  className="ml-1 p-0.5 rounded hover:bg-slate-300 transition-colors"
+                  title="Copy Room Code"
+                >
+                  {copiedCode ? (
+                    <Check className="w-3 h-3 text-emerald-600" />
+                  ) : (
+                    <Copy className="w-3 h-3 text-slate-400 hover:text-slate-700" />
+                  )}
+                </span>
+              </button>
+
+              <button
+                onClick={onLeaveRoom}
+                title="Leave this room and return to gateway"
+                className="p-1.5 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+              >
+                <LogOutIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
 
           {/* Cloud Connection Pill (Eloquent Style "On ☁️") */}
