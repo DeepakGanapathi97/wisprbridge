@@ -48,6 +48,11 @@ export default function WisprBridgeHome() {
     startGuestRoom,
     isInRoom,
     isSupabaseConfigured,
+    userRooms,
+    loadingUserRooms,
+    enterUserRoom,
+    deleteUserRoom,
+    createNamedRoom,
   } = useWisprBridge();
 
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
@@ -81,6 +86,12 @@ export default function WisprBridgeHome() {
             onStartGuestRoom={startGuestRoom}
             userEmail={user?.email}
             onSignOut={signOut}
+            userRooms={userRooms}
+            loadingUserRooms={loadingUserRooms}
+            onEnterRoom={enterUserRoom}
+            onDeleteRoom={deleteUserRoom}
+            onCreateNamedRoom={createNamedRoom}
+            onCopyCode={(code) => copyToClipboard(code)}
           />
         </main>
       ) : !isInRoom && loading ? (

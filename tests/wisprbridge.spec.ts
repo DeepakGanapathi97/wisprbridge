@@ -330,7 +330,19 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
     await page.locator('input[type="password"]').fill(testPassword);
     await page.locator("form").getByRole("button", { name: /Sign In|Sign Up/i }).first().click();
 
-    // Verify user enters room with their email in Header
+    // Verify user is signed in on Gateway with Active Rooms dashboard
+    await expect(page.getByText(new RegExp(`Signed in as.*${testEmail}`, "i"))).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("heading", { name: /Your Active Rooms/i })).toBeVisible({ timeout: 10000 });
+
+    // Enter or create a room under account
+    const enterRoomBtn = page.getByRole("button", { name: /Enter Room/i }).first();
+    if (await enterRoomBtn.isVisible()) {
+      await enterRoomBtn.click();
+    } else {
+      await page.getByRole("button", { name: /Create Room/i }).first().click();
+    }
+
+    // Verify user is in room workspace with their email in Header
     await expect(page.locator("header").filter({ hasText: testEmail })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("button", { name: /Sign Out/i })).toBeVisible();
 
@@ -341,6 +353,7 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
 
     // CRITICAL FIX ASSERTION: Gateway must show the user is STILL signed in, NOT logged out!
     await expect(page.getByText(new RegExp(`Signed in as.*${testEmail}`, "i"))).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: /Your Active Rooms/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i })).not.toBeVisible();
 
     // Click Sign Out on Gateway
@@ -348,5 +361,124 @@ test.describe("WisprBridge Web & Data Isolation Production E2E Suite", () => {
 
     // Now user is logged out and Gateway displays Sign In option again
     await expect(page.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i })).toBeVisible({ timeout: 5000 });
+  });
+
+  test("9. Multi-Room Account Orchestration: Orchestrator creates multiple rooms, switches rooms, and receiver on another account saves prompts into owner's room", async ({ browser }) => {
+    // -------------------------------------------------------------
+    // CONTEXT 1: Orchestrator Master Laptop (Account 1: wispr_test@test.com)
+    // -------------------------------------------------------------
+    const orchContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const orchPage = await orchContext.newPage();
+    await orchPage.goto(PROD_URL);
+    await orchPage.evaluate(() => localStorage.clear());
+    await orchPage.reload();
+    await orchPage.waitForLoadState("domcontentloaded");
+
+    // Orchestrator signs into account 1
+    await orchPage.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i }).click();
+    await expect(orchPage.locator('input[type="email"]')).toBeVisible({ timeout: 5000 });
+    await orchPage.locator('input[type="email"]').fill("wispr_test@test.com");
+    await orchPage.locator('input[type="password"]').fill("TestPassword123!");
+    await orchPage.locator("form").getByRole("button", { name: /Sign In|Sign Up/i }).first().click();
+
+    await expect(orchPage.getByText(/Signed in as.*wispr_test@test\.com/i)).toBeVisible({ timeout: 15000 });
+    await expect(orchPage.getByRole("heading", { name: /Your Active Rooms/i })).toBeVisible({ timeout: 10000 });
+
+    // Orchestrator creates Room 1 (Workstation PC 1)
+    await orchPage.getByRole("button", { name: /New Room/i }).first().click();
+    const room1Label = `PC 1 Workstation ${Date.now().toString().slice(-4)}`;
+    await orchPage.getByPlaceholder(/Room Label/i).fill(room1Label);
+    await orchPage.getByRole("button", { name: /Create & Enter/i }).click();
+
+    // Room 1 workspace is open
+    const room1Pill = orchPage.locator("header div").filter({ hasText: /Room:/i }).first();
+    await expect(room1Pill).toBeVisible({ timeout: 10000 });
+    const room1Code = (await room1Pill.innerText()).replace(/\D/g, "").slice(0, 6);
+
+    // Orchestrator leaves Room 1 to return to dashboard
+    await orchPage.getByRole("button", { name: /Leave Room/i }).click();
+    await expect(orchPage.getByRole("heading", { name: /Your Active Rooms/i })).toBeVisible({ timeout: 5000 });
+    // Verify Room 1 is listed in Active Rooms
+    await expect(orchPage.getByText(room1Label)).toBeVisible({ timeout: 10000 });
+
+    // Orchestrator creates Room 2 (Workstation PC 2)
+    await orchPage.getByRole("button", { name: /New Room/i }).first().click();
+    const room2Label = `PC 2 Terminal ${Date.now().toString().slice(-4)}`;
+    await orchPage.getByPlaceholder(/Room Label/i).fill(room2Label);
+    await orchPage.getByRole("button", { name: /Create & Enter/i }).click();
+
+    // Room 2 workspace is open
+    const room2Pill = orchPage.locator("header div").filter({ hasText: /Room:/i }).first();
+    await expect(room2Pill).toBeVisible({ timeout: 10000 });
+    const room2Code = (await room2Pill.innerText()).replace(/\D/g, "").slice(0, 6);
+
+    // Orchestrator leaves Room 2
+    await orchPage.getByRole("button", { name: /Leave Room/i }).click();
+    await expect(orchPage.getByRole("heading", { name: /Your Active Rooms/i })).toBeVisible();
+
+    // Orchestrator enters Room 1 from their Active Rooms dashboard
+    const room1Card = orchPage.locator(".space-y-2\\.5 > div").filter({ hasText: room1Label });
+    await expect(room1Card).toBeVisible();
+    await room1Card.getByRole("button", { name: /Enter Room/i }).click();
+    await expect(orchPage.locator("header div").filter({ hasText: room1Code }).first()).toBeVisible({ timeout: 10000 });
+
+    // -------------------------------------------------------------
+    // CONTEXT 2: Receiver Device (Account 2: wispr_receiver@test.com)
+    // -------------------------------------------------------------
+    const recvContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const recvPage = await recvContext.newPage();
+    await recvPage.goto(PROD_URL);
+    await recvPage.evaluate(() => localStorage.clear());
+    await recvPage.reload();
+    await recvPage.waitForLoadState("domcontentloaded");
+
+    // Receiver signs into account 2 (different account!)
+    await recvPage.getByRole("button", { name: /Sign In \/ Sign Up \(Optional\)/i }).click();
+    await expect(recvPage.locator('input[type="email"]')).toBeVisible({ timeout: 5000 });
+    await recvPage.locator('input[type="email"]').fill("wispr_receiver@test.com");
+    await recvPage.locator('input[type="password"]').fill("TestPassword123!");
+    await recvPage.locator("form").getByRole("button", { name: /Sign In|Sign Up/i }).first().click();
+    await expect(recvPage.getByText(/Signed in as.*wispr_receiver@test\.com/i)).toBeVisible({ timeout: 15000 });
+
+    // Receiver joins Room 1 owned by Account 1 via the 6-digit pair code
+    const joinCodeInput = recvPage.getByPlaceholder(/e\.g\. 582194/i);
+    await joinCodeInput.fill(room1Code);
+    await recvPage.getByRole("button", { name: /Join Room/i }).click();
+
+    // Receiver is now inside Room 1
+    await expect(recvPage.locator("header div").filter({ hasText: room1Code }).first()).toBeVisible({ timeout: 10000 });
+
+    // Receiver posts a prompt in Room 1
+    const testPromptText = `Cross-Account Sync: From Receiver PC to Master Room ${Date.now()}`;
+    const inputRecv = recvPage.getByPlaceholder(/Create unit tests|e\.g\./i);
+    await inputRecv.fill(testPromptText);
+    await recvPage.getByTitle(/Add and sync prompt/i).click();
+    await expect(recvPage.locator(".group").filter({ hasText: testPromptText })).toBeVisible({ timeout: 10000 });
+
+    // -------------------------------------------------------------
+    // VERIFICATION IN CONTEXT 1 (Orchestrator):
+    // -------------------------------------------------------------
+    // 1. Orchestrator sees the prompt from Receiver in Room 1
+    await expect(orchPage.locator(".group").filter({ hasText: testPromptText })).toBeVisible({ timeout: 15000 });
+
+    // 2. Orchestrator leaves Room 1 to dashboard
+    await orchPage.getByRole("button", { name: /Leave Room/i }).click();
+    await expect(orchPage.getByRole("heading", { name: /Your Active Rooms/i })).toBeVisible({ timeout: 5000 });
+
+    // 3. Orchestrator enters Room 2 (Workstation PC 2) to check strict isolation
+    const room2Card = orchPage.locator(".space-y-2\\.5 > div").filter({ hasText: room2Label });
+    await room2Card.getByRole("button", { name: /Enter Room/i }).click();
+    await expect(orchPage.locator("header div").filter({ hasText: room2Code }).first()).toBeVisible({ timeout: 10000 });
+    // Room 2 must NOT have the prompt posted to Room 1
+    await expect(orchPage.locator(".group").filter({ hasText: testPromptText })).not.toBeVisible();
+
+    // 4. Orchestrator switches back to Room 1: Prompt is still there from Supabase DB!
+    await orchPage.getByRole("button", { name: /Leave Room/i }).click();
+    const room1CardAgain = orchPage.locator(".space-y-2\\.5 > div").filter({ hasText: room1Label });
+    await room1CardAgain.getByRole("button", { name: /Enter Room/i }).click();
+    await expect(orchPage.locator(".group").filter({ hasText: testPromptText })).toBeVisible({ timeout: 15000 });
+
+    await orchContext.close();
+    await recvContext.close();
   });
 });

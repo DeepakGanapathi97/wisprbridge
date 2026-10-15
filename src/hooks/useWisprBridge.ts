@@ -14,6 +14,8 @@ export function useWisprBridge() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [pairCode, setPairCode] = useState<string>("");
+  const [userRooms, setUserRooms] = useState<Session[]>([]);
+  const [loadingUserRooms, setLoadingUserRooms] = useState<boolean>(false);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -364,6 +366,54 @@ export function useWisprBridge() {
     };
   }, []);
 
+  // Fetch active rooms belonging to authenticated user
+  const fetchUserRooms = useCallback(async () => {
+    if (!user) {
+      setUserRooms([]);
+      return;
+    }
+
+    if (!isSupabaseConfigured() || !supabase) {
+      const stored = localStorage.getItem(`wisprbridge_mock_user_rooms_${user.id}`);
+      if (stored) {
+        try {
+          setUserRooms(JSON.parse(stored));
+        } catch {
+          setUserRooms([]);
+        }
+      }
+      return;
+    }
+
+    try {
+      setLoadingUserRooms(true);
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("wispr_sessions")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .gt("expires_at", nowIso)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setUserRooms(data as Session[]);
+      }
+    } catch (err) {
+      console.error("Error fetching user rooms:", err);
+    } finally {
+      setLoadingUserRooms(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserRooms();
+    } else {
+      setUserRooms([]);
+    }
+  }, [user, fetchUserRooms]);
+
   // Initialize or pair session
   const initSession = useCallback(async (forcedPairCode?: string, forceGuestCreate: boolean = false) => {
     setLoading(true);
@@ -503,7 +553,6 @@ export function useWisprBridge() {
       setUser(mockUser);
       localStorage.setItem(LOCAL_STORAGE_MOCK_USER_KEY, JSON.stringify(mockUser));
       showToast(`✨ Welcome, ${email}!`);
-      await initSession(undefined, true);
       return { success: true };
     }
 
@@ -517,7 +566,6 @@ export function useWisprBridge() {
         if (data.user) {
           setUser(data.user);
           showToast("🎉 Account created! Signed in successfully.");
-          await initSession(undefined, true);
           return { success: true };
         }
       } else {
@@ -535,7 +583,6 @@ export function useWisprBridge() {
             if (!signUpErr && signUpData.user) {
               setUser(signUpData.user);
               showToast("🎉 Account automatically created & signed in!");
-              await initSession(undefined, true);
               return { success: true };
             }
           }
@@ -544,7 +591,6 @@ export function useWisprBridge() {
         if (data.user) {
           setUser(data.user);
           showToast(`👋 Welcome back, ${email}!`);
-          await initSession(undefined, true);
           return { success: true };
         }
       }
@@ -561,6 +607,7 @@ export function useWisprBridge() {
       await supabase.auth.signOut();
     }
     setUser(null);
+    setUserRooms([]);
     setSession(null);
     setPairCode("");
     setPrompts([]);
@@ -575,7 +622,7 @@ export function useWisprBridge() {
   };
 
   // Leave room (returns to gateway)
-  const leaveRoom = () => {
+  const leaveRoom = useCallback(() => {
     setSession(null);
     setPairCode("");
     setPrompts([]);
@@ -585,8 +632,122 @@ export function useWisprBridge() {
     isInitialFetchRef.current = true;
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     localStorage.removeItem(LOCAL_STORAGE_PAIR_CODE_KEY);
+    if (user) {
+      fetchUserRooms();
+    }
     showToast("Left room");
-  };
+  }, [user, fetchUserRooms, showToast]);
+
+  // Enter a specific active room
+  const enterUserRoom = useCallback(
+    async (targetSession: Session) => {
+      isInitialFetchRef.current = true;
+      localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, targetSession.id);
+      localStorage.setItem(LOCAL_STORAGE_PAIR_CODE_KEY, targetSession.pair_code);
+      setSession(targetSession);
+      setPairCode(targetSession.pair_code);
+      setIsConnected(true);
+      await fetchPrompts(targetSession.id);
+      showToast(`✨ Entered Room #${targetSession.pair_code}`);
+    },
+    [fetchPrompts, showToast]
+  );
+
+  // Close / Delete a user's room
+  const deleteUserRoom = useCallback(
+    async (sessionId: string) => {
+      if (!isSupabaseConfigured() || !supabase) {
+        setUserRooms((prev) => {
+          const next = prev.filter((r) => r.id !== sessionId);
+          if (user) {
+            localStorage.setItem(`wisprbridge_mock_user_rooms_${user.id}`, JSON.stringify(next));
+          }
+          return next;
+        });
+        if (session?.id === sessionId) {
+          leaveRoom();
+        }
+        showToast("Room closed");
+        return;
+      }
+
+      try {
+        const { error } = await supabase
+          .from("wispr_sessions")
+          .update({ is_active: false })
+          .eq("id", sessionId);
+
+        if (error) {
+          showToast("Error closing room: " + error.message);
+          return;
+        }
+
+        setUserRooms((prev) => prev.filter((r) => r.id !== sessionId));
+        if (session?.id === sessionId) {
+          leaveRoom();
+        }
+        showToast("Room closed");
+      } catch (err) {
+        console.error("Error closing room:", err);
+      }
+    },
+    [user, session?.id, leaveRoom, showToast]
+  );
+
+  // Create a named room for orchestrator / multi-device management
+  const createNamedRoom = useCallback(
+    async (label?: string) => {
+      const newCode = generateRandomCode();
+      const roomLabel = label?.trim() || (user ? `Room #${newCode}` : "Wispr Guest Session");
+
+      if (!isSupabaseConfigured() || !supabase) {
+        const mockSession: Session = {
+          id: `mock-sess-${newCode}`,
+          pair_code: newCode,
+          device_label: roomLabel,
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+          is_active: true,
+          user_id: user?.id,
+        };
+        if (user) {
+          setUserRooms((prev) => {
+            const next = [mockSession, ...prev];
+            localStorage.setItem(`wisprbridge_mock_user_rooms_${user.id}`, JSON.stringify(next));
+            return next;
+          });
+        }
+        await enterUserRoom(mockSession);
+        return mockSession;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("wispr_sessions")
+          .insert({
+            pair_code: newCode,
+            device_label: roomLabel,
+            user_id: user?.id ?? null,
+          })
+          .select()
+          .single();
+
+        if (error || !data) {
+          showToast("Failed to create room: " + (error?.message || "Unknown error"));
+          return null;
+        }
+
+        const newSession = data as Session;
+        await fetchUserRooms();
+        await enterUserRoom(newSession);
+        return newSession;
+      } catch (err) {
+        console.error("Create room error:", err);
+        return null;
+      }
+    },
+    [user, enterUserRoom, fetchUserRooms, showToast]
+  );
 
   // Create a brand new session code
   const createNewPairCode = async () => {
@@ -837,6 +998,12 @@ export function useWisprBridge() {
     signInOrSignUp,
     signOut,
     leaveRoom,
+    userRooms,
+    loadingUserRooms,
+    fetchUserRooms,
+    enterUserRoom,
+    deleteUserRoom,
+    createNamedRoom,
     startGuestRoom: () => initSession(undefined, true),
     isInRoom: Boolean(session && pairCode),
     isSupabaseConfigured: isSupabaseConfigured(),
